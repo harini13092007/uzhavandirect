@@ -1,0 +1,51 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Uzhavan Direct | Farmers Marketplace</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <header class="navbar">
+        <div class="logo">🌾 Uzhavan Direct</div>
+        <nav>
+            <a href="#products">Buy Produce</a>
+            <a href="#sell">Sell Crops</a>
+        </nav>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <h1>Direct Farm-to-Buyer Marketplace</h1>
+        <p>Fresh crops directly from farmers at fair prices with zero middlemen.</p>
+    </section>
+
+    <!-- Main Container -->
+    <main class="container">
+        <!-- Add Crop Form (Farmer Section) -->
+        <section id="sell" class="form-card">
+            <h2>Add New Crop Listing</h2>
+            <form id="cropForm">
+                <input type="text" id="cropName" placeholder="Crop Name (e.g., Ponni Rice, Tomato)" required>
+                <input type="number" id="cropPrice" placeholder="Price per Kg (₹)" required>
+                <input type="text" id="farmerLocation" placeholder="Location / Village" required>
+                <input type="number" id="cropQty" placeholder="Quantity Available (in Kg/Bags)" required>
+                <button type="submit">List Produce</button>
+            </form>
+        </section>
+
+        <!-- Marketplace Products Grid -->
+        <section id="products" class="market-section">
+            <h2>Available Crops</h2>
+            <div id="productGrid" class="product-grid">
+                <!-- Dynamically loaded via app.js -->
+            </div>
+        </section>
+    </main>
+
+    <script src="app.js"></script>
+</body>
+</html>

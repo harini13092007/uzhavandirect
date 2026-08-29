@@ -1,0 +1,121 @@
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+body {
+    background-color: #f4f7f4;
+    color: #2e3d2f;
+}
+
+.navbar {
+    background-color: #2d6a4f;
+    color: white;
+    padding: 1rem 2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.navbar .logo {
+    font-size: 1.4rem;
+    font-weight: bold;
+}
+
+.navbar a {
+    color: white;
+    text-decoration: none;
+    margin-left: 1.5rem;
+    font-weight: 500;
+}
+
+.hero {
+    text-align: center;
+    padding: 3rem 1rem;
+    background-color: #d8f3dc;
+}
+
+.hero h1 {
+    font-size: 2rem;
+    color: #1b4332;
+    margin-bottom: 0.5rem;
+}
+
+.container {
+    max-width: 1000px;
+    margin: 2rem auto;
+    padding: 0 1rem;
+}
+
+.form-card {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    margin-bottom: 2rem;
+}
+
+.form-card h2, .market-section h2 {
+    margin-bottom: 1rem;
+    color: #1b4332;
+}
+
+form {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+form input, form button {
+    padding: 0.75rem;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 1rem;
+}
+
+form button {
+    background-color: #2d6a4f;
+    color: white;
+    border: none;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+form button:hover {
+    background-color: #1b4332;
+}
+
+.product-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 1.5rem;
+}
+
+.card {
+    background: white;
+    padding: 1.2rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+    border-left: 5px solid #52b788;
+}
+
+.card h3 {
+    margin-bottom: 0.5rem;
+    color: #1b4332;
+}
+
+.card p {
+    font-size: 0.95rem;
+    margin-bottom: 0.3rem;
+    color: #555;
+}
+
+.card .price {
+    font-weight: bold;
+    color: #2d6a4f;
+    font-size: 1.1rem;
+    margin-top: 0.5rem;
+}
