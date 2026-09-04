@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Uzhavan Direct — Farm to Table, Direct</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- Toast -->
+<div id="toast" class="toast"></div>
+
+<!-- =========================================================
+     AUTH SCREEN
+     Shown when nobody is logged in. Contains the Farmer /
+     Consumer role switch plus Login and Sign-up forms.
+     ========================================================= -->
+<section id="authScreen" class="auth-screen">
+  <div class="auth-hero">
+    <div class="auth-hero-mark">🌾</div>
+    <h1 class="auth-hero-title">Uzhavan<br>Direct</h1>
+    <p class="auth-hero-sub">உழவன் நேரடி — Straight from the field to your door. No middlemen, fair prices, real farmers.</p>
+    <div class="auth-hero-stats">
+      <div><strong>0%</strong><span>Commission to middlemen</span></div>
+      <div><strong>10km</strong><span>Local sourcing radius</span></div>
+      <div><strong>24/7</strong><span>Farmer AI market advisor</span></div>
+    </div>
+  </div>
+
+  <div class="auth-panel">
+    <div class="auth-card">
+
+      <div class="role-switch">
+        <button class="role-btn active" data-role="farmer" id="roleFarmerBtn">🧑‍🌾 Farmer</button>
+        <button class="role-btn" data-role="consumer" id="roleConsumerBtn">🛒 Consumer</button>
+      </div>
+
+      <div class="auth-tabs">
+        <button class="auth-tab active" data-tab="login">Log in</button>
+        <button class="auth-tab" data-tab="signup">Sign up</button>
+      </div>
+
+      <!-- LOGIN FORM: matches username-or-phone + password against ud_users -->
+      <form id="loginForm" class="auth-form">
+        <label>Username or phone number
+          <input type="text" id="loginId" placeholder="e.g. karthik_farms or 9876543210" required>
+        </label>
+        <label>Password
+          <input type="password" id="loginPass" placeholder="Enter password" required>
+        </label>
+        <button type="submit" class="btn-primary">Log in as <span class="roleLabelInline">Farmer</span></button>
+        <p class="auth-hint">Demo accounts — Farmer: <b>karthik_farms</b> / <b>pass123</b>. Consumer: <b>divya_buys</b> / <b>pass123</b></p>
+      </form>
+
+      <!-- SIGNUP FORM (Sign-up + demo OTP verification) -->
+      <form id="signupForm" class="auth-form hidden">
+        <label>Full name
+          <input type="text" id="suName" placeholder="Your name" required>
+        </label>
+        <label>Username
+          <input type="text" id="suUsername" placeholder="Choose a username" required>
+        </label>
+        <label>Phone number
+          <input type="tel" id="suPhone" placeholder="10-digit mobile number" required maxlength="10">
+        </label>
+        <label>Password
+          <input type="password" id="suPass" placeholder="Create a password" required>
+        </label>
+
+        <!-- DEMO SIGNUP OTP: no real SMS is sent, the OTP is
+             generated and shown on-screen for demo purposes only -->
+        <div id="otpBlock" class="otp-block hidden">
+          <label>Enter OTP sent to your phone
+            <input type="text" id="suOtp" placeholder="6-digit OTP" maxlength="6">
+          </label>
+          <p class="auth-hint">Demo OTP: <b id="demoOtpDisplay"></b> (auto-filled for judges' convenience)</p>
+        </div>
+
+        <button type="button" id="sendOtpBtn" class="btn-primary">Send OTP</button>
+        <button type="submit" id="verifyOtpBtn" class="btn-primary hidden">Verify &amp; create account as <span class="roleLabelInline">Farmer</span></button>
+      </form>
+
+    </div>
+  </div>
+</section>
+
+<!-- =========================================================
+     APP SHELL
+     Shown after login. Sidebar = navigation (differs for
+     farmer vs consumer, built in app.js). Topbar = title,
+     language switch, notifications, and the logged-in user.
+     ========================================================= -->
+<div id="appShell" class="app-shell hidden">
+
+  <!-- NAVIGATION / SIDEBAR: links are filled in by renderNav() in app.js -->
+  <aside class="sidebar">
+    <div class="brand">🌾 <span>Uzhavan Direct</span></div>
+    <nav id="sideNav" class="side-nav"></nav>
+    <div class="sidebar-footer">
+      <button id="logoutBtn" class="logout-btn">⎋ Log out</button>
+    </div>
+  </aside>
+
+  <main class="main-area">
+    <header class="topbar">
+      <button id="menuToggle" class="menu-toggle">☰</button>
+      <div class="topbar-title" id="viewTitle">Dashboard</div>
+      <div class="topbar-right">
+        <!-- LANGUAGE SELECTION: switches all UI text via I18N in app.js -->
+        <select id="langSelect" class="lang-select">
+          <option value="en">English</option>
+          <option value="ta">தமிழ்</option>
+          <option value="hi">हिन्दी</option>
+        </select>
+
+        <!-- DONATION NOTIFICATIONS: bell shows an unread-count badge;
+             clicking it opens a dropdown list of notifications
+             (currently used for "you received a donation" alerts). -->
+        <div class="notif-wrap">
+          <button id="notifBell" class="notif-bell" title="Notifications">🔔<span id="notifBadge" class="notif-badge hidden">0</span></button>
+          <div id="notifPanel" class="notif-panel hidden"></div>
+        </div>
+
+        <div class="user-chip" id="userChip">👤 <span id="userChipName">User</span></div>
+      </div>
+    </header>
+
+    <!-- MAIN VIEW AREA: renderView() in app.js swaps this content
+         based on which sidebar item is selected -->
+    <div id="viewRoot" class="view-root"></div>
+  </main>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
