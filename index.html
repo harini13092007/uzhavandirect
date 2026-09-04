@@ -14,7 +14,7 @@
 
     <!-- Navigation Bar -->
     <header class="navbar">
-        
+
         <div class="nav-left">
             <div class="brand-logo">🌾 Uzhavan<span>Direct</span></div>
             <span id="userRoleBadge" class="badge role-badge">Guest</span>
@@ -213,21 +213,50 @@
                     <div class="chat-header">
                         <div class="avatar">🤖</div>
                         <div>
-                            <h3>Uzhavan Kisan AI Assistant</h3>
+                            <h3>Uzhavan AI Assistant</h3>
                             <small class="text-success">● Online | Agri Market Advisory</small>
                         </div>
                     </div>
                     <div class="chat-messages" id="aiChatWindow">
                         <div class="message ai">
-                            <p>வணக்கம் / Namaste! Ask me about current mandi market rates, bidding recommendations, or fertilizer schedules.</p>
+                            <p>வணக்கம் Ask me about current mandi market rates, bidding recommendations, or fertilizer schedules.</p>
                         </div>
                     </div>
-                    <div class="chat-input-bar">
-                        <input type="text" id="aiUserInput" placeholder="Ask AI (e.g. 'What is the wholesale rate for tomatoes today?')" onkeypress="if(event.key === 'Enter') sendFarmerAIMessage()">
-                        <button class="btn btn-primary" onclick="sendFarmerAIMessage()">Ask AI</button>
+                    <div class="chat-quick-actions">
+                        <button onclick="askFarmerQuestion('What crop should I grow?')">
+                            🌱 Crop Recommendation
+                        </button>
+
+                        <button onclick="askFarmerQuestion('Which crops have high demand?')">
+                            📈 High Demand
+                        </button>
+
+                        <button onclick="askFarmerQuestion('What price should I set?')">
+                            💰 Price Advice
+                        </button>
+
+                        <button onclick="askFarmerQuestion('How can I reduce wastage?')">
+                            ♻️ Reduce Wastage
+                        </button>
                     </div>
-                </div>
-            </section>
+
+                    <div class="chat-input-bar">
+                        <input
+                            type="text"
+                            id="aiUserInput"
+                            placeholder="Ask AI..."
+                            onkeypress="if(event.key === 'Enter') sendFarmerAIMessage()"
+                        >
+
+                        <button
+                            class="btn btn-primary"
+                            onclick="sendFarmerAIMessage()"
+                        >
+                            Ask AI
+                        </button>
+                    </div>
+                                    </div>
+                                </section>
 
             <!-- FARMER SUB-TAB: SETTINGS & PROFILE -->
             <section id="farmer-settings" class="view-section hidden">

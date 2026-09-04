@@ -1104,19 +1104,258 @@ function openLiveTrackingModal(id) {
 // 10. AI Chat & Demand Tracker
 function sendFarmerAIMessage() {
     const input = document.getElementById("aiUserInput");
+    const chatWindow = document.getElementById("aiChatWindow");
+
     const query = input.value.trim();
+
     if (!query) return;
 
-    const chatWindow = document.getElementById("aiChatWindow");
-    chatWindow.innerHTML += `<div class="message user"><p>${query}</p></div>`;
+    chatWindow.innerHTML += `
+        <div class="message user">
+            <p>${query}</p>
+        </div>
+    `;
+
     input.value = "";
 
-    setTimeout(() => {
-        let reply = "Current mandi rates in Thanjavur: Tomato is ₹32-36/kg, Paddy is ₹22/kg at DPC centers. Suggested auction base: ₹30/kg.";
-        if (query.toLowerCase().includes("tomato")) {
-            reply = "Tomatoes are high in demand this week. Recommended wholesale reserve: ₹30/kg for quick sales.";
+    const q = query.toLowerCase();
+
+    let reply = "";
+
+    // Crop recommendation
+    if (
+        q.includes("what crop") ||
+        q.includes("which crop") ||
+        q.includes("crop should") ||
+        q.includes("grow")
+    ) {
+        const topCrop = state.demandData
+            .slice()
+            .sort((a, b) => b.score - a.score)[0];
+
+        reply = `
+            🌱 <strong>Crop Recommendation</strong><br><br>
+            Based on the current demand data,
+            <strong>${topCrop.crop}</strong> has the highest demand
+            score of <strong>${topCrop.score}%</strong>.<br><br>
+            📈 Demand Status:
+            <strong>${topCrop.tag}</strong><br><br>
+            💡 Consider market demand along with soil,
+            water availability and local conditions before planting.
+        `;
+    }
+
+    // Tomato demand
+    else if (q.includes("tomato")) {
+        const tomato = state.demandData.find(item =>
+            item.crop.toLowerCase().includes("tomato")
+        );
+
+        reply = `
+            🍅 <strong>Tomato Market Advisory</strong><br><br>
+            Current demand:
+            <strong>${tomato ? tomato.score + "%" : "High"}</strong><br><br>
+            💰 Suggested wholesale reserve:
+            <strong>₹30/kg</strong><br><br>
+            📦 Tomatoes are currently showing strong demand
+            in the marketplace.
+        `;
+    }
+
+    // Price recommendation
+    else if (
+        q.includes("price") ||
+        q.includes("rate") ||
+        q.includes("selling price")
+    ) {
+        reply = `
+            💰 <strong>Price Advisory</strong><br><br>
+            Consider these factors before setting your price:<br>
+            • Current demand<br>
+            • Production cost<br>
+            • Quantity available<br>
+            • Produce quality<br>
+            • Shelf life<br><br>
+            📊 Example:
+            Tomatoes can be listed around
+            <strong>₹30–₹36/kg</strong> depending on quality and demand.
+        `;
+    }
+
+    // High demand crops
+    else if (
+        q.includes("high demand") ||
+        q.includes("demand") ||
+        q.includes("most demanded")
+    ) {
+        const sortedDemand = state.demandData
+            .slice()
+            .sort((a, b) => b.score - a.score);
+
+        reply = `
+            📈 <strong>High-Demand Crops</strong><br><br>
+            ${sortedDemand.map((item, index) => `
+                ${index + 1}. <strong>${item.crop}</strong>
+                — ${item.score}% (${item.tag})<br>
+            `).join("")}
+            <br>
+            💡 Higher scores indicate stronger demand
+            in this demo marketplace.
+        `;
+    }
+
+    // How to sell
+    else if (
+        q.includes("how can i sell") ||
+        q.includes("how to sell") ||
+        q.includes("sell my produce") ||
+        q.includes("sell produce")
+    ) {
+        reply = `
+            🧺 <strong>How to Sell Your Produce</strong><br><br>
+            1️⃣ Open <strong>Sell Item</strong>.<br>
+            2️⃣ Enter your produce name.<br>
+            3️⃣ Select the category.<br>
+            4️⃣ Enter price and quantity.<br>
+            5️⃣ Enter shelf life.<br>
+            6️⃣ Upload the produce.<br><br>
+            ✅ Your produce will then appear
+            in the consumer marketplace.
+        `;
+    }
+
+    // Shelf life
+    else if (
+        q.includes("shelf life") ||
+        q.includes("expire") ||
+        q.includes("perishable")
+    ) {
+        reply = `
+            ⏳ <strong>Shelf Life Advisory</strong><br><br>
+            Shelf life depends on the type of produce.<br><br>
+            🥛 Dairy → Usually a few hours<br>
+            🍅 Vegetables → Usually a few days<br>
+            🍎 Fruits → Several days depending on the fruit<br>
+            🌾 Grains → Several months when stored properly<br><br>
+            💡 Proper storage can help reduce spoilage.
+        `;
+    }
+
+    // Reduce wastage
+    else if (
+        q.includes("wastage") ||
+        q.includes("waste") ||
+        q.includes("reduce loss")
+    ) {
+        reply = `
+            ♻️ <strong>Reduce Farm Wastage</strong><br><br>
+            • List perishable crops quickly.<br>
+            • Check demand before harvesting large quantities.<br>
+            • Offer bulk discounts when appropriate.<br>
+            • Prefer nearby buyers for highly perishable goods.<br>
+            • Use auctions for large quantities.<br>
+            • Store produce properly.
+        `;
+    }
+
+    // Auction
+    else if (
+        q.includes("auction") ||
+        q.includes("bidding") ||
+        q.includes("bid")
+    ) {
+        reply = `
+            🔨 <strong>Auction Advisory</strong><br><br>
+            Auctions are useful for selling larger quantities.<br><br>
+            1️⃣ Open <strong>Online Bidding</strong>.<br>
+            2️⃣ Select your crop.<br>
+            3️⃣ Enter the quantity.<br>
+            4️⃣ Set the base price.<br>
+            5️⃣ Set the auction duration.<br>
+            6️⃣ Start the auction.<br><br>
+            💡 A competitive base price can attract more buyers.
+        `;
+    }
+
+    // My stock
+    else if (
+        q.includes("my stock") ||
+        q.includes("my produce") ||
+        q.includes("my crops")
+    ) {
+        if (state.user && state.user.role === "farmer") {
+
+            const myCrops = state.crops.filter(
+                crop => crop.farmerUsername === state.user.username
+            );
+
+            if (myCrops.length > 0) {
+                reply = `
+                    📦 <strong>Your Current Farm Stock</strong><br><br>
+                    ${myCrops.map(crop => `
+                        🌱 <strong>${crop.name}</strong>
+                        — ${crop.qty} kg
+                        — ₹${crop.price}/kg<br>
+                    `).join("")}
+                `;
+            } else {
+                reply = `
+                    📦 You currently have no produce listed.<br><br>
+                    Go to <strong>Sell Item</strong> to add your harvest.
+                `;
+            }
+
+        } else {
+            reply = `
+                Please login as a farmer to view your farm stock.
+            `;
         }
-        chatWindow.innerHTML += `<div class="message ai"><p>${reply}</p></div>`;
+    }
+
+    // Greeting
+    else if (
+        q.includes("hello") ||
+        q.includes("hi") ||
+        q.includes("namaste") ||
+        q.includes("vanakkam")
+    ) {
+        reply = `
+            🙏 <strong>Vanakkam!</strong><br><br>
+            I am <strong>Uzhavan AI</strong>, your farm market assistant.<br><br>
+            You can ask me about:<br>
+            🌱 Crop recommendations<br>
+            📈 Market demand<br>
+            💰 Price suggestions<br>
+            🧺 Selling produce<br>
+            🔨 Auctions<br>
+            ⏳ Shelf life<br>
+            ♻️ Reducing wastage
+        `;
+    }
+
+    // Unknown question
+    else {
+        reply = `
+            🤖 I can help you with farm-market decisions.<br><br>
+            Try asking:<br>
+            • <strong>What crop should I grow?</strong><br>
+            • <strong>What is the demand for tomatoes?</strong><br>
+            • <strong>What price should I set?</strong><br>
+            • <strong>Which crops have high demand?</strong><br>
+            • <strong>How can I sell my produce?</strong><br>
+            • <strong>How can I reduce wastage?</strong><br>
+            • <strong>How do I start an auction?</strong>
+        `;
+    }
+
+    // AI response delay
+    setTimeout(() => {
+        chatWindow.innerHTML += `
+            <div class="message ai">
+                <p>${reply}</p>
+            </div>
+        `;
+
         chatWindow.scrollTop = chatWindow.scrollHeight;
     }, 600);
 }
