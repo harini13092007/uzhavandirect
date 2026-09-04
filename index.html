@@ -1,572 +1,140 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Uzhavan Direct | உழவன் டைரக்ட்</title>
-    <link rel="stylesheet" href="style.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Uzhavan Direct — Farm to Table, Direct</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div id="toastContainer" class="toast-container"></div>
 
-    <!-- Navigation Bar -->
-    <header class="navbar">
-        <div class="nav-left">
-            <div class="brand-logo">🌾 Uzhavan<span>Direct</span></div>
-            <span id="userRoleBadge" class="badge role-badge">Guest</span>
-        </div>
-        <div class="nav-right">
-            <select id="langSelect" class="lang-picker" onchange="changeLanguage(this.value)">
-                <option value="en">English</option>
-                <option value="ta">தமிழ் (Tamil)</option>
-                <option value="hi">हिन्दी (Hindi)</option>
-            </select>
+<!-- Toast -->
+<div id="toast" class="toast"></div>
 
-            <div id="authNavButtons" class="auth-buttons">
-                <button class="btn btn-outline" onclick="openModal('authModal')">Login / Sign Up</button>
-            </div>
-            
-            <div id="userNavProfile" class="user-nav hidden">
-                <span id="navUsername" class="user-name">User</span>
-                <button class="btn btn-secondary btn-sm" onclick="logout()" data-i18n="logout">Logout</button>
-            </div>
+<!-- =========================================================
+     AUTH SCREEN
+     Shown when nobody is logged in. Contains the Farmer /
+     Consumer role switch plus Login and Sign-up forms.
+     ========================================================= -->
+<section id="authScreen" class="auth-screen">
+  <div class="auth-hero">
+    <div class="auth-hero-mark">🌾</div>
+    <h1 class="auth-hero-title">Uzhavan<br>Direct</h1>
+    <p class="auth-hero-sub">உழவன் நேரடி — Straight from the field to your door. No middlemen, fair prices, real farmers.</p>
+    <div class="auth-hero-stats">
+      <div><strong>0%</strong><span>Commission to middlemen</span></div>
+      <div><strong>10km</strong><span>Local sourcing radius</span></div>
+      <div><strong>24/7</strong><span>Farmer AI market advisor</span></div>
+    </div>
+  </div>
+
+  <div class="auth-panel">
+    <div class="auth-card">
+
+      <div class="role-switch">
+        <button class="role-btn active" data-role="farmer" id="roleFarmerBtn">🧑‍🌾 Farmer</button>
+        <button class="role-btn" data-role="consumer" id="roleConsumerBtn">🛒 Consumer</button>
+      </div>
+
+      <div class="auth-tabs">
+        <button class="auth-tab active" data-tab="login">Log in</button>
+        <button class="auth-tab" data-tab="signup">Sign up</button>
+      </div>
+
+      <!-- LOGIN FORM: matches username-or-phone + password against ud_users -->
+      <form id="loginForm" class="auth-form">
+        <label>Username or phone number
+          <input type="text" id="loginId" placeholder="e.g. karthik_farms or 9876543210" required>
+        </label>
+        <label>Password
+          <input type="password" id="loginPass" placeholder="Enter password" required>
+        </label>
+        <button type="submit" class="btn-primary">Log in as <span class="roleLabelInline">Farmer</span></button>
+        <p class="auth-hint">Demo accounts — Farmer: <b>karthik_farms</b> / <b>pass123</b>. Consumer: <b>divya_buys</b> / <b>pass123</b></p>
+      </form>
+
+      <!-- SIGNUP FORM (Sign-up + demo OTP verification) -->
+      <form id="signupForm" class="auth-form hidden">
+        <label>Full name
+          <input type="text" id="suName" placeholder="Your name" required>
+        </label>
+        <label>Username
+          <input type="text" id="suUsername" placeholder="Choose a username" required>
+        </label>
+        <label>Phone number
+          <input type="tel" id="suPhone" placeholder="10-digit mobile number" required maxlength="10">
+        </label>
+        <label>Password
+          <input type="password" id="suPass" placeholder="Create a password" required>
+        </label>
+
+        <!-- DEMO SIGNUP OTP: no real SMS is sent, the OTP is
+             generated and shown on-screen for demo purposes only -->
+        <div id="otpBlock" class="otp-block hidden">
+          <label>Enter OTP sent to your phone
+            <input type="text" id="suOtp" placeholder="6-digit OTP" maxlength="6">
+          </label>
+          <p class="auth-hint">Demo OTP: <b id="demoOtpDisplay"></b> (auto-filled for judges' convenience)</p>
         </div>
+
+        <button type="button" id="sendOtpBtn" class="btn-primary">Send OTP</button>
+        <button type="submit" id="verifyOtpBtn" class="btn-primary hidden">Verify &amp; create account as <span class="roleLabelInline">Farmer</span></button>
+      </form>
+
+    </div>
+  </div>
+</section>
+
+<!-- =========================================================
+     APP SHELL
+     Shown after login. Sidebar = navigation (differs for
+     farmer vs consumer, built in app.js). Topbar = title,
+     language switch, notifications, and the logged-in user.
+     ========================================================= -->
+<div id="appShell" class="app-shell hidden">
+
+  <!-- NAVIGATION / SIDEBAR: links are filled in by renderNav() in app.js -->
+  <aside class="sidebar">
+    <div class="brand">🌾 <span>Uzhavan Direct</span></div>
+    <nav id="sideNav" class="side-nav"></nav>
+    <div class="sidebar-footer">
+      <button id="logoutBtn" class="logout-btn">⎋ Log out</button>
+    </div>
+  </aside>
+
+  <main class="main-area">
+    <header class="topbar">
+      <button id="menuToggle" class="menu-toggle">☰</button>
+      <div class="topbar-title" id="viewTitle">Dashboard</div>
+      <div class="topbar-right">
+        <!-- LANGUAGE SELECTION: switches all UI text via I18N in app.js -->
+        <select id="langSelect" class="lang-select">
+          <option value="en">English</option>
+          <option value="ta">தமிழ்</option>
+          <option value="hi">हिन्दी</option>
+        </select>
+
+        <!-- DONATION NOTIFICATIONS: bell shows an unread-count badge;
+             clicking it opens a dropdown list of notifications
+             (currently used for "you received a donation" alerts). -->
+        <div class="notif-wrap">
+          <button id="notifBell" class="notif-bell" title="Notifications">🔔<span id="notifBadge" class="notif-badge hidden">0</span></button>
+          <div id="notifPanel" class="notif-panel hidden"></div>
+        </div>
+
+        <div class="user-chip" id="userChip">👤 <span id="userChipName">User</span></div>
+      </div>
     </header>
 
-    <div class="app-layout">
-        <!-- Sidebar -->
-        <aside id="sidebar" class="sidebar hidden">
-            <div class="user-summary-card">
-                <div class="avatar" id="sidebarAvatar">👨‍🌾</div>
-                <div class="user-meta">
-                    <h4 id="sidebarName">User Name</h4>
-                    <p id="sidebarRoleLabel">Role</p>
-                    <small id="sidebarAddressLabel" class="text-muted" style="font-size: 0.72rem;"></small>
-                </div>
-            </div>
-            <nav class="sidebar-menu" id="sidebarMenu"></nav>
-        </aside>
+    <!-- MAIN VIEW AREA: renderView() in app.js swaps this content
+         based on which sidebar item is selected -->
+    <div id="viewRoot" class="view-root"></div>
+  </main>
+</div>
 
-        <!-- Main Content -->
-        <main class="content-area">
-            
-            <!-- Guest Welcome Screen -->
-            <section id="guestHero" class="guest-hero">
-                <div class="hero-badge">🚀 SIH 2026 Innovation</div>
-                <h1 data-i18n="heroTitle">Direct Farm-to-Buyer Digital Ecosystem</h1>
-                <p data-i18n="heroSubtitle">Zero Middlemen. Fair Mandi Rates. Transparent Auctions. Direct Farmer Empowerment.</p>
-                <div class="hero-cta">
-                    <button class="btn btn-primary" onclick="quickLogin('farmer')">Enter Demo as Farmer 🚜</button>
-                    <button class="btn btn-dark" onclick="quickLogin('consumer')">Enter Demo as Buyer 🛒</button>
-                    <button class="btn btn-secondary" onclick="openModal('authModal')">New User? Register Here ✍️</button>
-                </div>
-            </section>
-
-            <!-- FARMER DASHBOARD -->
-            <section id="farmerDashboard" class="view-section hidden">
-                <div class="dashboard-header">
-                    <div>
-                        <h2 data-i18n="farmerDashTitle">Farmer Control Center</h2>
-                        <p class="subtitle" id="farmerAddressSubtitle">Direct Harvest Listings & Disbursements</p>
-                    </div>
-                    <button class="btn btn-primary" onclick="showTab('farmer-sell')">+ <span data-i18n="addProduce">List New Produce</span></button>
-                </div>
-
-                <!-- 3 Top Clickable Stats Cards -->
-                <div class="stats-grid">
-                    <div class="stat-card clickable" onclick="openFarmerOrdersModal('pending')">
-                        <div class="stat-icon warning">⏳</div>
-                        <div>
-                            <span class="stat-label" data-i18n="pendingOrders">Pending Orders</span>
-                            <h3 id="farmerPendingCount">0</h3>
-                            <small class="hint">Click to inspect buyer details</small>
-                        </div>
-                    </div>
-                    <div class="stat-card clickable" onclick="openFarmerOrdersModal('completed')">
-                        <div class="stat-icon success">✅</div>
-                        <div>
-                            <span class="stat-label" data-i18n="completedOrders">Completed Orders</span>
-                            <h3 id="farmerCompletedCount">0</h3>
-                            <small class="hint">Click to review & refund option</small>
-                        </div>
-                    </div>
-                    <div class="stat-card clickable" onclick="openFarmerEarningsModal()">
-                        <div class="stat-icon primary">💰</div>
-                        <div>
-                            <span class="stat-label" data-i18n="totalReceived">Total Money Received</span>
-                            <h3 id="farmerTotalEarnings">₹0</h3>
-                            <small class="hint">Click to see transaction ledger</small>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Active Produce Inventory on Dashboard -->
-                <div class="section-card mt-4">
-                    <div class="card-header-flex">
-                        <h3 data-i18n="myCurrentStock">My Active Farm Produce in Market</h3>
-                        <span class="badge badge-gps" id="farmerCropCount">0 items live</span>
-                    </div>
-                    <div id="farmerInventoryGrid" class="inventory-grid mt-2">
-                        <!-- Populated dynamically based strictly on logged-in farmer -->
-                    </div>
-                </div>
-            </section>
-
-            <!-- FARMER SUB-TAB: SELL ITEM -->
-            <section id="farmer-sell" class="view-section hidden">
-                <div class="section-card max-w-700">
-                    <h2 data-i18n="sellProduceHeading">List Fresh Farm Produce</h2>
-                    <p class="subtitle">Upload harvest details. Accurate item icon and shelf-life will be tagged automatically.</p>
-                    
-                    <form id="sellForm" onsubmit="handleNewProduce(event)">
-                        <div class="form-group">
-                            <label data-i18n="cropCategory">Produce Category</label>
-                            <select id="cropCategory" class="form-control" required onchange="autoSuggestItem(this.value)">
-                                <option value="Vegetables">Fresh Vegetables (காய்கறிகள்)</option>
-                                <option value="Grains">Grains & Cereals (தானியங்கள்)</option>
-                                <option value="Fruits">Fresh Fruits (பழங்கள்)</option>
-                                <option value="Dairy">Dairy Products (பால் பொருட்கள்)</option>
-                            </select>
-                        </div>
-
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label data-i18n="cropName">Produce Name</label>
-                                <input type="text" id="cropName" class="form-control" placeholder="e.g. Tomato, Ponni Rice, Potato, Milk" required>
-                            </div>
-                            <div class="form-group">
-                                <label data-i18n="pricePerKg">Price (₹ per Kg / Liter)</label>
-                                <input type="number" id="cropPrice" class="form-control" min="1" placeholder="₹ Price" required>
-                            </div>
-                        </div>
-
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label data-i18n="quantityAvailable">Available Quantity (Kg / Liters)</label>
-                                <input type="number" id="cropQty" class="form-control" min="1" placeholder="Quantity" required>
-                            </div>
-                            <div class="form-group">
-                                <label data-i18n="perishabilityLife">Perishability / Shelf Life</label>
-                                <input type="text" id="cropShelfLife" class="form-control" placeholder="e.g. 4 Days, 6 Months" required>
-                            </div>
-                        </div>
-
-                        <button type="submit" class="btn btn-primary btn-block" data-i18n="uploadProduceBtn">Upload Produce to Marketplace</button>
-                    </form>
-                </div>
-            </section>
-
-            <!-- FARMER SUB-TAB: AUCTION HOSTING -->
-            <section id="farmer-auction" class="view-section hidden">
-                <div class="section-card">
-                    <h2 data-i18n="auctionHeader">Launch Bulk Buyer Crop Auction</h2>
-                    <p class="subtitle">Set your total bulk quantity and reserve price per kg for restaurant and wholesale bidding.</p>
-                    
-                    <form id="auctionForm" class="inline-form" onsubmit="handleStartAuction(event)">
-                        <input type="text" id="aucItemName" class="form-control" placeholder="Crop (e.g. Tomato)" required>
-                        <input type="number" id="aucTotalQty" class="form-control" placeholder="Total Qty (kg)" min="1" required>
-                        <input type="number" id="aucBasePrice" class="form-control" placeholder="Base Price (₹/kg)" min="1" required>
-                        <select id="aucDuration" class="form-control">
-                            <option value="120">2 Hours Window</option>
-                            <option value="60">1 Hour Window</option>
-                            <option value="5">5 Minutes Demo</option>
-                        </select>
-                        <button type="submit" class="btn btn-dark" data-i18n="startAuctionBtn">Start Auction</button>
-                    </form>
-
-                    <h3 class="mt-4" data-i18n="activeAuctions">Active Bidding Sessions</h3>
-                    <div id="farmerAuctionList" class="auction-grid mt-2"></div>
-                </div>
-            </section>
-
-            <!-- FARMER SUB-TAB: DEMAND TRACKER -->
-            <section id="farmer-demand" class="view-section hidden">
-                <div class="section-card">
-                    <h2 data-i18n="demandTrackerHeading">Agricultural Demand Forecast & Daily Sales</h2>
-                    <p class="subtitle">Top items demanded by restaurants and households based on live order frequencies.</p>
-                    
-                    <div class="demand-analytics-grid">
-                        <div class="demand-list" id="demandRankList"></div>
-                        <div class="demand-insight-box">
-                            <h3 data-i18n="marketTips">Kisan Advisory Alert</h3>
-                            <div class="tip-card">
-                                <strong>🔥 High Deficit: Tomatoes & Small Onions</strong>
-                                <p>Consumer orders up 38% this week. Mandi rates are trending ₹8/kg above average.</p>
-                            </div>
-                            <div class="tip-card">
-                                <strong>📦 Stable Grain Demand: Ponni Rice</strong>
-                                <p>Continuous bulk buying requests from local hotel associations.</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- FARMER SUB-TAB: AI CHATBOT -->
-            <section id="farmer-ai" class="view-section hidden">
-                <div class="chat-container section-card">
-                    <div class="chat-header">
-                        <div class="avatar">🤖</div>
-                        <div>
-                            <h3>Uzhavan Kisan AI Assistant</h3>
-                            <small class="text-success">● Online | Agri Market Advisory</small>
-                        </div>
-                    </div>
-                    <div class="chat-messages" id="aiChatWindow">
-                        <div class="message ai">
-                            <p>வணக்கம் / Namaste! Ask me about current mandi market rates, bidding recommendations, or fertilizer schedules.</p>
-                        </div>
-                    </div>
-                    <div class="chat-input-bar">
-                        <input type="text" id="aiUserInput" placeholder="Ask AI (e.g. 'What is the wholesale rate for tomatoes today?')" onkeypress="if(event.key === 'Enter') sendFarmerAIMessage()">
-                        <button class="btn btn-primary" onclick="sendFarmerAIMessage()">Ask AI</button>
-                    </div>
-                </div>
-            </section>
-
-            <!-- FARMER SUB-TAB: SETTINGS & PROFILE -->
-            <section id="farmer-settings" class="view-section hidden">
-                <div class="settings-grid">
-                    <div class="section-card">
-                        <h3 data-i18n="publicProfile">Farmer Public Profile</h3>
-                        <div class="profile-card">
-                            <div class="profile-avatar">👨‍🌾</div>
-                            <h2 id="farmerProfileName">Murugan K</h2>
-                            <p id="farmerProfileAddress">📍 Thanjavur</p>
-                            <p>📞 Phone: <strong id="farmerProfilePhone">+91 98421 23000</strong></p>
-                            <div class="profile-stats">
-                                <div><h4 id="farmerFollowerCount">12</h4><span>Followers</span></div>
-                                <div><h4>4.9 ★</h4><span>Farmer Rating</span></div>
-                            </div>
-                        </div>
-
-                        <div class="donations-box mt-3">
-                            <h4 data-i18n="reliefFundDonations">Kisan Calamity Relief Donations</h4>
-                            <p class="subtitle">Direct consumer financial aid for flood/cyclone recovery.</p>
-                            <ul class="donation-list" id="farmerDonationLedger"></ul>
-                        </div>
-                    </div>
-
-                    <div class="section-card">
-                        <h3 data-i18n="helpGuideTitle">Help & How It Works</h3>
-                        <div class="accordion">
-                            <div class="accordion-item">
-                                <strong>How do payments reach me?</strong>
-                                <p>Funds transfer instantly via UPI to your bank upon delivery verification.</p>
-                            </div>
-                            <div class="accordion-item">
-                                <strong>What if I cannot deliver?</strong>
-                                <p>Use the "Refund Money" button inside Completed Orders to return funds directly.</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- ================= CONSUMER VIEWS ================= -->
-            
-            <!-- CONSUMER DASHBOARD -->
-            <section id="consumerDashboard" class="view-section hidden">
-                <div class="dashboard-header">
-                    <div>
-                        <h2 data-i18n="consumerDashTitle">Consumer & Buyer Portal</h2>
-                        <p class="subtitle" data-i18n="consumerDashSub">Fresh harvest directly from local verified farmers</p>
-                    </div>
-                    <div class="cart-quick-btn" onclick="showTab('consumer-cart')">
-                        🛒 <span data-i18n="cart">Cart</span> (<span id="consumerCartCount">0</span>)
-                    </div>
-                </div>
-
-                <!-- 3 Top Stats Cards for Consumer -->
-                <div class="stats-grid">
-                    <div class="stat-card clickable" onclick="showTab('consumer-orders')">
-                        <div class="stat-icon primary">📦</div>
-                        <div>
-                            <span class="stat-label" data-i18n="itemsOrdered">Items Ordered</span>
-                            <h3 id="consumerOrderCount">0 Active</h3>
-                            <small class="hint">Includes Live GPS Tracking</small>
-                        </div>
-                    </div>
-                    <div class="stat-card clickable" onclick="showTab('consumer-cart')">
-                        <div class="stat-icon warning">🛍️</div>
-                        <div>
-                            <span class="stat-label" data-i18n="cartItems">Cart Ready</span>
-                            <h3 id="consumerCartValue">₹0</h3>
-                            <small class="hint">Click to Checkout</small>
-                        </div>
-                    </div>
-                    <div class="stat-card clickable" onclick="openConsumerTransactionsModal()">
-                        <div class="stat-icon success">💳</div>
-                        <div>
-                            <span class="stat-label" data-i18n="moneySpent">Money Spent</span>
-                            <h3 id="consumerTotalSpent">₹0</h3>
-                            <small class="hint">Click to view transaction table</small>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Unified Search for Crops and Farmers -->
-                <div class="section-card mt-4">
-                    <div class="card-header-flex">
-                        <h3 data-i18n="availableFreshProduce">Marketplace & Search</h3>
-                        <div class="search-box-inline">
-                            <input type="text" id="marketSearchInput" placeholder="Search tomato, rice, or farmer name..." onkeyup="filterMarketplaceAndFarmers()">
-                        </div>
-                    </div>
-
-                    <!-- Farmer Search Results Block -->
-                    <div id="farmerSearchResults" class="farmer-search-row hidden"></div>
-
-                    <!-- Crops Grid -->
-                    <div id="consumerMarketGrid" class="product-grid mt-2"></div>
-                </div>
-            </section>
-
-            <!-- CONSUMER SUB-TAB: NEARBY YOU -->
-            <section id="consumer-nearby" class="view-section hidden">
-                <div class="section-card">
-                    <div class="nearby-header">
-                        <div>
-                            <h2 data-i18n="nearbyHeading">Nearby Farmers (Within 10 km Radius)</h2>
-                            <p class="subtitle">Direct local produce harvested near your village or town.</p>
-                        </div>
-                        <span class="badge badge-gps">📍 Geolocation Active</span>
-                    </div>
-
-                    <div id="nearbyProduceGrid" class="product-grid mt-3"></div>
-                </div>
-            </section>
-
-            <!-- CONSUMER SUB-TAB: AUCTIONS -->
-            <section id="consumer-bidding" class="view-section hidden">
-                <div class="section-card">
-                    <h2 data-i18n="wholesaleBidding">Bulk Wholesale Bidding Arena</h2>
-                    <p class="subtitle">Specify your quantity and bid above the reserve price. When the timer expires, items are sold out!</p>
-                    <div id="consumerAuctionGrid" class="auction-grid mt-3"></div>
-                </div>
-            </section>
-
-            <!-- CONSUMER SUB-TAB: ORDERS -->
-            <section id="consumer-orders" class="view-section hidden">
-                <div class="section-card">
-                    <h2 data-i18n="myPurchases">My Orders & Live Dispatch Tracking</h2>
-                    <div id="consumerOrdersList" class="orders-list-vertical mt-3"></div>
-                </div>
-            </section>
-
-            <!-- CONSUMER SUB-TAB: CART -->
-            <section id="consumer-cart" class="view-section hidden">
-                <div class="section-card max-w-800">
-                    <h2 data-i18n="myCart">Your Farm Cart</h2>
-                    <div id="cartItemsList" class="cart-items-container"></div>
-                    
-                    <div id="cartSummaryBlock" class="cart-summary-box hidden">
-                        <div class="cart-total-row">
-                            <span>Subtotal:</span>
-                            <span id="cartSubtotal">₹0</span>
-                        </div>
-                        <div class="cart-total-row">
-                            <span>Direct Delivery Fee:</span>
-                            <span>₹30</span>
-                        </div>
-                        <hr>
-                        <div class="cart-total-row total-bold">
-                            <span>Grand Total:</span>
-                            <span id="cartGrandTotal">₹0</span>
-                        </div>
-                        <button class="btn btn-primary btn-block mt-3" onclick="openCheckoutModal()" data-i18n="proceedCheckout">Proceed to Checkout</button>
-                    </div>
-                </div>
-            </section>
-
-            <!-- CONSUMER SUB-TAB: SETTINGS & FOLLOWING -->
-            <section id="consumer-settings" class="view-section hidden">
-                <div class="settings-grid">
-                    <div class="section-card">
-                        <h3 data-i18n="followingTitle">Farmers You Follow</h3>
-                        <p class="subtitle">Direct numbers for instant contact and crop availability updates.</p>
-                        <div id="followingFarmersList" class="following-list"></div>
-                    </div>
-                    <div class="section-card">
-                        <h3 data-i18n="appGuideConsumer">Consumer Guide & Direct Support</h3>
-                        <p>100% direct transaction platform. Zero middleman cuts.</p>
-                        <p class="mt-2">Use the <strong>Donate</strong> option during heavy rains or crop damages to directly support smallholder farmers.</p>
-                    </div>
-                </div>
-            </section>
-
-        </main>
-    </div>
-
-    <!-- ================= MODALS ================= -->
-
-    <!-- 1. AUTH MODAL (WITH FARMER ADDRESS & DETAILS) -->
-    <div id="authModal" class="modal-overlay hidden">
-        <div class="modal-window">
-            <div class="modal-header">
-                <h3>Uzhavan Direct Access</h3>
-                <button class="close-btn" onclick="closeModal('authModal')">&times;</button>
-            </div>
-            <div class="modal-body">
-                <div class="role-selector-tab">
-                    <button id="roleBtnFarmer" class="role-tab active" onclick="selectAuthRole('farmer')">I am a Farmer (விவசாயி)</button>
-                    <button id="roleBtnConsumer" class="role-tab" onclick="selectAuthRole('consumer')">I am a Buyer (வாங்குபவர்)</button>
-                </div>
-
-                <form id="authForm" onsubmit="handleAuthSubmit(event)">
-                    <div class="form-group">
-                        <label>Full Name</label>
-                        <input type="text" id="authFullName" class="form-control" placeholder="e.g. Murugan K" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Username</label>
-                        <input type="text" id="authUsername" class="form-control" placeholder="e.g. murugan_farm" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Phone Number (for OTP)</label>
-                        <input type="tel" id="authPhone" class="form-control" placeholder="10-digit mobile number" required>
-                    </div>
-                    <div class="form-group" id="addressFormGroup">
-                        <label id="authAddressLabel">Farm Address (Village / District)</label>
-                        <input type="text" id="authAddress" class="form-control" placeholder="e.g. Thiruvaiyaru, Thanjavur District" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Password</label>
-                        <input type="password" id="authPassword" class="form-control" placeholder="••••••••" required>
-                    </div>
-                    <div class="form-group">
-                        <label>4-Digit OTP (Use: <strong>1234</strong>)</label>
-                        <input type="text" id="authOTP" class="form-control" placeholder="1234" value="1234" required>
-                    </div>
-                    <button type="submit" class="btn btn-primary btn-block">Verify OTP & Register / Login</button>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <!-- 2. FARMER ORDERS MODAL (REFUND OPTION) -->
-    <div id="farmerOrdersModal" class="modal-overlay hidden">
-        <div class="modal-window max-w-700">
-            <div class="modal-header">
-                <h3 id="farmerOrdersModalTitle">Orders</h3>
-                <button class="close-btn" onclick="closeModal('farmerOrdersModal')">&times;</button>
-            </div>
-            <div class="modal-body" id="farmerOrdersModalContent"></div>
-        </div>
-    </div>
-
-    <!-- 3. FARMER EARNINGS MODAL -->
-    <div id="farmerEarningsModal" class="modal-overlay hidden">
-        <div class="modal-window max-w-700">
-            <div class="modal-header">
-                <h3>Farmer Received Earnings Ledger</h3>
-                <button class="close-btn" onclick="closeModal('farmerEarningsModal')">&times;</button>
-            </div>
-            <div class="modal-body" id="farmerEarningsContent"></div>
-        </div>
-    </div>
-
-    <!-- 4. CONSUMER MONEY SPENT & TRANSACTIONS TABLE MODAL -->
-    <div id="consumerTransactionsModal" class="modal-overlay hidden">
-        <div class="modal-window max-w-700">
-            <div class="modal-header">
-                <h3>My Expenses & Transaction History</h3>
-                <button class="close-btn" onclick="closeModal('consumerTransactionsModal')">&times;</button>
-            </div>
-            <div class="modal-body" id="consumerTransactionsContent">
-                <!-- Table injected dynamically -->
-            </div>
-        </div>
-    </div>
-
-    <!-- 5. CONSUMER CHECKOUT MODAL -->
-    <div id="checkoutModal" class="modal-overlay hidden">
-        <div class="modal-window max-w-600">
-            <div class="modal-header">
-                <h3>Direct Farm Payment Checkout</h3>
-                <button class="close-btn" onclick="closeModal('checkoutModal')">&times;</button>
-            </div>
-            <div class="modal-body">
-                <form id="paymentForm" onsubmit="processCheckoutPayment(event)">
-                    <h4>Choose Payment Mode</h4>
-                    <div class="payment-methods">
-                        <label class="radio-card">
-                            <input type="radio" name="payMethod" value="UPI" checked>
-                            <span>⚡ Direct UPI (GPay / PhonePe / Paytm)</span>
-                        </label>
-                        <label class="radio-card">
-                            <input type="radio" name="payMethod" value="Card">
-                            <span>💳 Debit / Credit Card</span>
-                        </label>
-                        <label class="radio-card">
-                            <input type="radio" name="payMethod" value="COD">
-                            <span>💵 Cash on Delivery</span>
-                        </label>
-                    </div>
-
-                    <div class="form-group mt-3">
-                        <label>Delivery Address</label>
-                        <textarea id="deliveryAddress" class="form-control" rows="2" required>No. 42, Cauvery Nagar, Thanjavur</textarea>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Bank Payment OTP Simulation</label>
-                        <input type="text" class="form-control" value="5421" readonly>
-                    </div>
-
-                    <button type="submit" class="btn btn-primary btn-block">Confirm Order & Pay</button>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <!-- 6. GPS NAVIGATION MODAL -->
-    <div id="navigationModal" class="modal-overlay hidden">
-        <div class="modal-window max-w-600">
-            <div class="modal-header">
-                <h3>🚜 Live Delivery Tracking</h3>
-                <button class="close-btn" onclick="closeModal('navigationModal')">&times;</button>
-            </div>
-            <div class="modal-body">
-                <div class="gps-route-container">
-                    <div class="gps-pin-card">
-                        <div class="pulse-dot"></div>
-                        <h2 id="navDistanceRemaining">4.0 km away</h2>
-                        <p id="navDriverStatus">Produce dispatched from village hub</p>
-                    </div>
-                    <div class="gps-progress-bar">
-                        <div id="gpsProgressFill" class="gps-fill" style="width: 25%;"></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- 7. DONATION MODAL -->
-    <div id="donateModal" class="modal-overlay hidden">
-        <div class="modal-window max-w-500">
-            <div class="modal-header">
-                <h3>Direct Kisan Calamity Relief</h3>
-                <button class="close-btn" onclick="closeModal('donateModal')">&times;</button>
-            </div>
-            <div class="modal-body">
-                <p>Support <strong id="donateFarmerName">Farmer</strong> directly during crop damages or unseasonal weather. Zero platform commissions.</p>
-                <div class="form-group mt-2">
-                    <label>Donation Amount (₹)</label>
-                    <input type="number" id="donateAmount" class="form-control" value="200" min="10" required>
-                </div>
-                <div class="form-group">
-                    <label>Your Name</label>
-                    <input type="text" id="donorName" class="form-control" value="Harini" required>
-                </div>
-                <button class="btn btn-primary btn-block" onclick="executeFarmerDonation()">Send Relief Direct to Farmer</button>
-            </div>
-        </div>
-    </div>
-
-    <script src="app.js"></script>
+<script src="app.js"></script>
 </body>
 </html>
