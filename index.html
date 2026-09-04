@@ -238,12 +238,45 @@
                             <p id="farmerProfileAddress">📍 Thanjavur</p>
                             <p>📞 Phone: <strong id="farmerProfilePhone">+91 98421 23000</strong></p>
                             <div class="profile-stats">
-                                <div><h4 id="farmerFollowerCount">12</h4><span>Followers</span></div>
-                                <div><h4>4.9 ★</h4><span>Farmer Rating</span></div>
-                            </div>
-                        </div>
+                                <div>
+                                    <h4 id="farmerFollowerCount">12</h4>
+                                    <span>Followers</span>
+                                </div>
 
-                        <div class="donations-box mt-3">
+                                <div>
+                                    <h4 id="farmerOverallRating">4.9 ★</h4>
+                                    <span>Farmer Rating (<span id="farmerRatingCount">0</span>)</span>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="ratingFarmerSelect"><strong>Select Farmer</strong></label>
+
+                                <select id="ratingFarmerSelect"
+                                        class="form-control"
+                                        onchange="setCurrentRatingFarmer(this.value)">
+                                    <option value="murugan_k">Murugan K</option>
+                                    <option value="senthil_dairy">Senthil Kumar</option>
+                                    <option value="raman_farm">Ramanathan P</option>
+                                </select>
+                            </div>
+                            <div class="farmer-rating-box mt-3">
+                                <h4>Rate this Farmer</h4>
+
+                                <div class="rating-stars" id="ratingStars">
+                                    <button onclick="setFarmerRating(1)">★</button>
+                                    <button onclick="setFarmerRating(2)">★</button>
+                                    <button onclick="setFarmerRating(3)">★</button>
+                                    <button onclick="setFarmerRating(4)">★</button>
+                                    <button onclick="setFarmerRating(5)">★</button>
+                                </div>
+
+                                <p id="ratingText">Select a rating</p>
+
+                                <button class="btn btn-primary btn-sm"
+                                        onclick="submitFarmerRating()">
+                                    Submit Rating
+                                </button>
+                            </div>
                             <h4 data-i18n="reliefFundDonations">Kisan Calamity Relief Donations</h4>
                             <p class="subtitle">Direct consumer financial aid for flood/cyclone recovery.</p>
                             <ul class="donation-list" id="farmerDonationLedger"></ul>

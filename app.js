@@ -1142,7 +1142,142 @@ function renderDemandTracker() {
         `;
     });
 }
+// ==========================================================
+// INDIVIDUAL FARMER RATING SYSTEM
+// ==========================================================
+let selectedFarmerRating = 0;
+let currentRatingFarmer = "murugan_k";
 
+function loadDefaultFarmerRating() {
+    currentRatingFarmer = "murugan_k";
+    selectedFarmerRating = 0;
+    updateFarmerRating(currentRatingFarmer);
+}
+
+function setCurrentRatingFarmer(farmerUsername) {
+    if (!farmerUsername) return;
+
+    currentRatingFarmer = farmerUsername;
+    selectedFarmerRating = 0;
+
+    document.querySelectorAll("#ratingStars button").forEach(star => {
+        star.classList.remove("selected");
+    });
+
+    const ratingText = document.getElementById("ratingText");
+
+    if (ratingText) {
+        ratingText.textContent = "Select a rating";
+    }
+
+    updateFarmerRating(farmerUsername);
+}
+
+function setFarmerRating(rating) {
+    if (!currentRatingFarmer) {
+        showToast("Please select a farmer first.");
+        return;
+    }
+
+    selectedFarmerRating = rating;
+
+    document.querySelectorAll("#ratingStars button").forEach((star, index) => {
+        star.classList.toggle("selected", index < rating);
+    });
+
+    const ratingText = document.getElementById("ratingText");
+
+    if (ratingText) {
+        ratingText.textContent = `${rating} out of 5 stars`;
+    }
+}
+
+function submitFarmerRating() {
+    if (!currentRatingFarmer) {
+        showToast("Farmer profile not selected.");
+        return;
+    }
+
+    if (selectedFarmerRating === 0) {
+        showToast("Please select a rating first.");
+        return;
+    }
+
+    let allRatings = JSON.parse(
+        localStorage.getItem("farmerRatings") || "{}"
+    );
+
+    if (!allRatings[currentRatingFarmer]) {
+        allRatings[currentRatingFarmer] = [];
+    }
+
+    allRatings[currentRatingFarmer].push({
+        rating: selectedFarmerRating,
+        ratedBy: state.user ? state.user.username : "guest",
+        date: new Date().toISOString()
+    });
+
+    localStorage.setItem(
+        "farmerRatings",
+        JSON.stringify(allRatings)
+    );
+
+    updateFarmerRating(currentRatingFarmer);
+
+    showToast("Thank you! Your rating has been submitted.");
+
+    selectedFarmerRating = 0;
+
+    document.querySelectorAll("#ratingStars button").forEach(star => {
+        star.classList.remove("selected");
+    });
+
+    const ratingText = document.getElementById("ratingText");
+
+    if (ratingText) {
+        ratingText.textContent = "Select a rating";
+    }
+}
+
+function updateFarmerRating(farmerUsername) {
+    const allRatings = JSON.parse(
+        localStorage.getItem("farmerRatings") || "{}"
+    );
+
+    const ratings = allRatings[farmerUsername] || [];
+
+    const ratingElement =
+        document.getElementById("farmerOverallRating");
+
+    const countElement =
+        document.getElementById("farmerRatingCount");
+
+    if (!ratingElement || !countElement) return;
+
+    if (ratings.length === 0) {
+        ratingElement.textContent = "No ratings ★";
+        countElement.textContent = "0";
+        return;
+    }
+
+    const total = ratings.reduce(
+        (sum, item) => sum + Number(item.rating),
+        0
+    );
+
+    const average = total / ratings.length;
+
+    ratingElement.textContent =
+        `${average.toFixed(1)} ★`;
+
+    countElement.textContent =
+        ratings.length;
+}
+function askFarmerQuestion(question) {
+    const input = document.getElementById("aiUserInput");
+    input.value = question;
+    sendFarmerAIMessage();
+}
 // 11. Multi-Language Engine & Dynamic Name Translation
 function translateProduce(name) {
     if (currentLang === 'en' || !cropDictionary[name]) return name;
@@ -1186,4 +1321,7 @@ function showToast(msg) {
     setTimeout(() => toast.remove(), 3200);
 }
 
-document.addEventListener("DOMContentLoaded", initUI);
+document.addEventListener("DOMContentLoaded", () => {
+    initUI();
+    loadDefaultFarmerRating();
+});

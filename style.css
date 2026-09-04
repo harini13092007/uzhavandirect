@@ -401,6 +401,39 @@ body {
 .demand-bar { height: 8px; background: #d8f3dc; border-radius: 4px; overflow: hidden; margin-top: 4px; }
 .demand-fill { height: 100%; background: var(--primary); border-radius: 4px; }
 .tip-card { background: #f0f7f2; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border-left: 4px solid var(--primary); }
+.farmer-rating-box {
+    border-top: 1px solid var(--border);
+    padding-top: 1.2rem;
+    text-align: center;
+}
+
+.rating-stars {
+    display: flex;
+    justify-content: center;
+    gap: 0.25rem;
+    margin: 0.7rem 0;
+}
+
+.rating-stars button {
+    border: none;
+    background: transparent;
+    color: #cbd5ce;
+    font-size: 2rem;
+    cursor: pointer;
+    transition: 0.2s;
+}
+
+.rating-stars button:hover,
+.rating-stars button.selected {
+    color: #f4b400;
+    transform: scale(1.1);
+}
+
+#ratingText {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin-bottom: 0.7rem;
+}
 
 @media (max-width: 850px) {
     .app-layout { flex-direction: column; }
