@@ -83,7 +83,7 @@ function seed(){
     meena_agro:{type:"farmer",name:"Meena Devi",phone:"9123456780",password:"pass123",
       village:"Erode, TN",bio:"Organic dairy & millet farm.",followers:[],donations:[],notifications:[]},
     divya_buys:{type:"consumer",name:"Divya Sundar",phone:"9988776655",password:"pass123",
-      following:["karthik_farms"]}
+        following:["karthik_farms"],city:"Chennai",address:"14 Anna Nagar, Chennai, Tamil Nadu"}
   };
 
   const produce = [
@@ -132,6 +132,32 @@ function seed(){
 }
 seed();
 
+// Keep existing demo sessions compatible with the consumer profile fields.
+function ensureConsumerProfileFields(){
+  const users = store.get('ud_users');
+  if (!users) return;
+  let changed = false;
+  Object.values(users).forEach(user=>{
+    if (user.type==='consumer' && user.address === undefined){
+      user.address = '';
+      changed = true;
+    }
+    if (user.type==='consumer' && user.city === undefined){
+      user.city = '';
+      changed = true;
+    }
+  });
+  if (users.divya_buys && !users.divya_buys.address) {
+    users.divya_buys.address = '14 Anna Nagar, Chennai, Tamil Nadu';
+    changed = true;
+  }
+  if (users.divya_buys && !users.divya_buys.city) {
+    users.divya_buys.city = 'Chennai';
+    changed = true;
+  }
+  if (changed) store.set('ud_users', users);
+}
+
 /* ===============================
    LOCALSTORAGE / DATA PERSISTENCE
    `store` is the one place all
@@ -163,6 +189,7 @@ const store = {
   ratings(){ return this.get('ud_ratings') || []; },
   saveRatings(r){ this.set('ud_ratings', r); }
 };
+ensureConsumerProfileFields();
 
 /* ---------- Toast ---------- */
 function toast(msg){
@@ -418,7 +445,7 @@ document.getElementById('signupForm').addEventListener('submit', e=>{
   const users = store.users();
   users[uname] = selectedRole==='farmer'
     ? {type:"farmer",name,phone,password:pass,village:"Not set",bio:"",followers:[],donations:[]}
-    : {type:"consumer",name,phone,password:pass,following:[]};
+    : {type:"consumer",name,phone,password:pass,address:"",following:[]};
   store.saveUsers(users);
   if (selectedRole==='consumer') store.saveCart(uname, []);
   toast("✅ Account created!");
@@ -482,6 +509,7 @@ const CONSUMER_NAV = [
   {id:'nearby', icon:'📍', key:'nearby'},
   {id:'bidding', icon:'⚖️', key:'bidding'},
   {id:'search', icon:'🔍', key:'search'},
+  {id:'profile', icon:'👤', key:'profile'},
   {id:'settings', icon:'⚙️', key:'settings'}
 ];
 
@@ -549,6 +577,7 @@ function renderView(viewId){
     const map = {dashboard:renderConsumerDashboard, nearby:renderNearby, bidding:renderConsumerBidding,
       search:renderSearch, settings:renderConsumerSettings, itemsOrdered:renderItemsOrdered,
       cart:renderCart, moneyTable:renderConsumerMoneyTable, following:renderFollowing,
+      profile:renderConsumerProfile,
       farmerProfile:renderFarmerPublicProfile};
     (map[viewId]||renderConsumerDashboard)(root);
   }
@@ -638,6 +667,11 @@ function getOrderStage(o){
 function orderDisplayId(o){
   return 'FD' + o.id.replace(/[^0-9]/g,'').slice(-4).padStart(4,'0');
 }
+function cityFromAddress(address){
+  if (!address) return '';
+  const cities = ['Chennai','Salem','Coimbatore','Erode','Madurai','Trichy','Tiruchirappalli','Thanjavur'];
+  return cities.find(city=>address.toLowerCase().includes(city.toLowerCase())) || '';
+}
 // Moves an order one step forward through DELIVERY_STAGES (Placed →
 // Confirmed → Packed → Out for Delivery → Delivered). Reaching
 // "delivered" also marks the order status "completed" so it's counted
@@ -665,6 +699,7 @@ function openTrackingModal(orderId){
   overlay.innerHTML = `<div class="modal-box">
     <h3 style="font-size:19px;">📦 Order #${orderDisplayId(o)}</h3>
     <p style="color:var(--ink-soft);font-size:13.5px;margin-top:2px;">${o.item} · Quantity: ${o.qty}${o.unit} · Total: ${money(o.price)}</p>
+    <p style="color:var(--ink-soft);font-size:13px;margin-top:2px;">Tracking city: ${o.city || cityFromAddress(o.address) || 'Chennai'}</p>
     <div class="section-head" style="margin-top:14px;margin-bottom:2px;"><h3 style="font-size:14px;">Delivery Status</h3></div>
     <div class="tracking-timeline">
       ${DELIVERY_STAGES.map((s,i)=>`
@@ -1399,7 +1434,7 @@ function completeCheckout(){
   const u = getUser(currentUser);
   cart.forEach(c=>{
     orders.push({id:'o'+Date.now()+Math.random().toString(36).slice(2,5), farmer:c.farmer, consumer:u.name,
-      item:c.name, qty:c.qty, unit:c.unit, price:c.price*c.qty, address:u.address||'Address on file',
+      item:c.name, qty:c.qty, unit:c.unit, price:c.price*c.qty, city:u.city||cityFromAddress(u.address)||'Chennai', address:u.address||'Address on file',
       status:'pending', date:new Date().toISOString().slice(0,10),
       // DELIVERY TRACKING: every new order starts at "placed" and moves
       // forward through DELIVERY_STAGES as the farmer updates it.
@@ -1469,6 +1504,40 @@ function showFarmerProduce(uname){
 function renderConsumerBidding(root){
   root.innerHTML = `<div class="section-head"><h3>${t('bidding')}</h3><span class="muted">Bid on bulk produce lots</span></div><div id="cAuctions"></div>`;
   renderAuctionList(document.getElementById('cAuctions'), store.auctions(), true);
+}
+
+function renderConsumerProfile(root){
+  const u = getUser(currentUser);
+  root.innerHTML = `
+    <div class="section-head"><h3>${t('profile')}</h3><span class="muted">Your customer details</span></div>
+    <div class="card">
+      <div class="profile-head">
+        <div class="avatar">${u.name.split(' ').map(x=>x[0]).join('').slice(0,2)}</div>
+        <div>
+          <h3 style="font-size:20px;">${u.name}</h3>
+          <div class="order-sub">📞 ${u.phone}</div>
+        </div>
+      </div>
+      <div class="profile-address-block">
+        <div class="settings-row-label">📍 City name</div>
+        <input id="consumerCity" type="text" value="${u.city||''}" placeholder="e.g. Chennai">
+        <div class="settings-row-label" style="margin-top:14px;">🏠 Home address</div>
+        <div class="order-sub">The city is used to calculate the tracking route.</div>
+        <textarea id="consumerAddress" rows="3" placeholder="Enter your full home address">${u.address||''}</textarea>
+        <button class="btn-primary" id="saveConsumerProfile" style="margin-top:12px;">Save address</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('saveConsumerProfile').onclick = ()=>{
+    const city = document.getElementById('consumerCity').value.trim();
+    const address = document.getElementById('consumerAddress').value.trim();
+    if (!city || !address){ toast("⚠️ Enter both your city and home address"); return; }
+    const users = store.users();
+    users[currentUser].city = city;
+    users[currentUser].address = address;
+    store.saveUsers(users);
+    toast("✅ Home address updated");
+  };
 }
 
 // ===============================

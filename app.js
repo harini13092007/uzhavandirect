@@ -84,7 +84,7 @@ function seed(){
     meena_agro:{type:"farmer",name:"Meena Devi",phone:"9123456780",password:"pass123",
       village:"Erode, TN",bio:"Organic dairy & millet farm.",followers:[],donations:[],notifications:[]},
     divya_buys:{type:"consumer",name:"Divya Sundar",phone:"9988776655",password:"pass123",
-      following:["karthik_farms"]}
+      following:["karthik_farms"],city:"Chennai",address:"14 Anna Nagar, Chennai, Tamil Nadu"}
   };
 
   const produce = [
@@ -133,6 +133,32 @@ function seed(){
 }
 seed();
 
+// Keep existing demo sessions compatible with the consumer profile fields.
+function ensureConsumerProfileFields(){
+  const users = store.get('ud_users');
+  if (!users) return;
+  let changed = false;
+  Object.values(users).forEach(user=>{
+    if (user.type==='consumer' && user.address === undefined){
+      user.address = '';
+      changed = true;
+    }
+    if (user.type==='consumer' && user.city === undefined){
+      user.city = '';
+      changed = true;
+    }
+  });
+  if (users.divya_buys && !users.divya_buys.address) {
+    users.divya_buys.address = '14 Anna Nagar, Chennai, Tamil Nadu';
+    changed = true;
+  }
+  if (users.divya_buys && !users.divya_buys.city) {
+    users.divya_buys.city = 'Chennai';
+    changed = true;
+  }
+  if (changed) store.set('ud_users', users);
+}
+
 /* ===============================
    LOCALSTORAGE / DATA PERSISTENCE
    `store` is the one place all
@@ -164,6 +190,7 @@ const store = {
   ratings(){ return this.get('ud_ratings') || []; },
   saveRatings(r){ this.set('ud_ratings', r); }
 };
+ensureConsumerProfileFields();
 
 /* ---------- Toast ---------- */
 function toast(msg){
@@ -419,7 +446,7 @@ document.getElementById('signupForm').addEventListener('submit', e=>{
   const users = store.users();
   users[uname] = selectedRole==='farmer'
     ? {type:"farmer",name,phone,password:pass,village:"Not set",bio:"",followers:[],donations:[]}
-    : {type:"consumer",name,phone,password:pass,following:[]};
+    : {type:"consumer",name,phone,password:pass,address:"",following:[]};
   store.saveUsers(users);
   if (selectedRole==='consumer') store.saveCart(uname, []);
   toast("✅ Account created!");
@@ -483,6 +510,7 @@ const CONSUMER_NAV = [
   {id:'nearby', icon:'📍', key:'nearby'},
   {id:'bidding', icon:'⚖️', key:'bidding'},
   {id:'search', icon:'🔍', key:'search'},
+  {id:'profile', icon:'👤', key:'profile'},
   {id:'settings', icon:'⚙️', key:'settings'}
 ];
 
@@ -550,6 +578,7 @@ function renderView(viewId){
     const map = {dashboard:renderConsumerDashboard, nearby:renderNearby, bidding:renderConsumerBidding,
       search:renderSearch, settings:renderConsumerSettings, itemsOrdered:renderItemsOrdered,
       cart:renderCart, moneyTable:renderConsumerMoneyTable, following:renderFollowing,
+      profile:renderConsumerProfile,
       farmerProfile:renderFarmerPublicProfile};
     (map[viewId]||renderConsumerDashboard)(root);
   }
@@ -639,6 +668,11 @@ function getOrderStage(o){
 function orderDisplayId(o){
   return 'FD' + o.id.replace(/[^0-9]/g,'').slice(-4).padStart(4,'0');
 }
+function cityFromAddress(address){
+  if (!address) return '';
+  const cities = ['Chennai','Salem','Coimbatore','Erode','Madurai','Trichy','Tiruchirappalli','Thanjavur'];
+  return cities.find(city=>address.toLowerCase().includes(city.toLowerCase())) || '';
+}
 // Moves an order one step forward through DELIVERY_STAGES (Placed →
 // Confirmed → Packed → Out for Delivery → Delivered). Reaching
 // "delivered" also marks the order status "completed" so it's counted
@@ -662,25 +696,138 @@ function openTrackingModal(orderId){
   if (!o) return;
   const stage = getOrderStage(o);
   const curIdx = DELIVERY_STAGES.indexOf(stage);
+  const farmer = getUser(o.farmer);
+  const source = farmer?.village || 'Thanjavur, Tamil Nadu, India';
+  const destination = o.address || 'Address on file';
+  const destinationCity = o.city || cityFromAddress(o.address) || 'Chennai';
   const overlay = document.createElement('div'); overlay.className='modal-overlay';
-  overlay.innerHTML = `<div class="modal-box">
-    <h3 style="font-size:19px;">📦 Order #${orderDisplayId(o)}</h3>
-    <p style="color:var(--ink-soft);font-size:13.5px;margin-top:2px;">${o.item} · Quantity: ${o.qty}${o.unit} · Total: ${money(o.price)}</p>
-    <div class="section-head" style="margin-top:14px;margin-bottom:2px;"><h3 style="font-size:14px;">Delivery Status</h3></div>
-    <div class="tracking-timeline">
-      ${DELIVERY_STAGES.map((s,i)=>`
-        <div class="tracking-step ${i<curIdx?'done':i===curIdx?'current':'upcoming'}">
-          <div class="tracking-dot">${i<curIdx?'✓':i===curIdx?'●':'○'}</div>
-          <div class="tracking-text">
-            <div class="tracking-label">${DELIVERY_STAGE_LABELS[s]}</div>
-            <div class="tracking-desc">${DELIVERY_STAGE_DESC[s]}</div>
-          </div>
-        </div>`).join('')}
+  overlay.innerHTML = `<div class="tracker-modal">
+    <div class="tracker-header">
+      <div>
+        <p class="eyebrow"><i class="fa-solid fa-location-dot"></i> Live order tracking</p>
+        <h3>Fresh Produce Dispatch Tracker</h3>
+        <p class="tracker-order-meta">Order #${orderDisplayId(o)} · ${o.item} · ${o.qty}${o.unit} · ${money(o.price)}</p>
+      </div>
+      <button class="icon-close" id="closeTracking" aria-label="Close tracking"><i class="fa-solid fa-xmark"></i></button>
     </div>
-    <button class="pill-btn" id="closeTracking" style="width:100%;margin-top:16px;">Close</button>
+    <div class="tracker-layout">
+      <section class="tracker-sidebar">
+        <div class="route-summary"><span>${source}</span><i class="fa-solid fa-arrow-right"></i><strong>${destination}</strong></div>
+        <div id="dynamic-tracking-timeline" class="tracking-timeline">
+          <div class="tracking-loading">Locating route checkpoints...</div>
+        </div>
+        <div class="tracker-actions"><span class="status-label">Current status: <strong>${DELIVERY_STAGE_LABELS[stage]}</strong></span><button class="btn-primary tracker-advance" ${stage==='delivered'?'disabled':''}>${stage==='delivered'?'Delivered':'Advance Transit'} <i class="fa-solid fa-arrow-right"></i></button></div>
+      </section>
+      <section class="tracker-map-column">
+        <div id="tracker-map-${orderId}" class="tracker-map"></div>
+        <div class="arrival-drawer ${stage==='delivered'?'':'hidden'}"><div class="arrival-icon"><i class="fa-solid fa-bell"></i></div><div><h4>Your fresh produce has reached ${destination}!</h4><p>Select when you are free to collect your order so local delivery drivers can be assigned.</p><form class="delivery-schedule-form"><label>Delivery window<select required><option value="" disabled selected>Choose a time slot</option><option>Morning (8:00 AM - 12:00 PM)</option><option>Afternoon (12:00 PM - 4:00 PM)</option><option>Evening (4:00 PM - 8:00 PM)</option></select></label><button type="submit" class="btn-success">Confirm window &amp; notify drivers</button></form></div></div>
+      </section>
+    </div>
   </div>`;
   document.body.appendChild(overlay);
   overlay.querySelector('#closeTracking').onclick = ()=> overlay.remove();
+
+  const timeline = overlay.querySelector('#dynamic-tracking-timeline');
+  const advanceButton = overlay.querySelector('.tracker-advance');
+  const statusLabel = overlay.querySelector('.status-label strong');
+  const arrivalDrawer = overlay.querySelector('.arrival-drawer');
+  let map = null;
+  let transitMarker = null;
+  let currentStepIndex = 0;
+  let generatedCheckpoints = [];
+
+  function renderDynamicTimeline(){
+    timeline.innerHTML = generatedCheckpoints.map((checkpoint, index)=>{
+      const passed = index < currentStepIndex;
+      const active = index === currentStepIndex;
+      return `<div class="tracking-step ${passed?'done':active?'current':'upcoming'}">
+        <div class="tracking-dot">${passed?'✓':active?'●':'○'}</div>
+        <div class="tracking-text"><div class="tracking-label">${checkpoint.name}</div><div class="tracking-desc">${active ? checkpoint.label : passed ? 'Departed' : 'En route'}</div></div>
+      </div>`;
+    }).join('');
+    const stageIndex = Math.min(currentStepIndex, DELIVERY_STAGES.length - 1);
+    statusLabel.textContent = DELIVERY_STAGE_LABELS[DELIVERY_STAGES[stageIndex]];
+  }
+
+  advanceButton.onclick = ()=>{
+    if (currentStepIndex >= generatedCheckpoints.length - 1) return;
+    currentStepIndex++;
+    const checkpoint = generatedCheckpoints[currentStepIndex];
+    transitMarker?.setLatLng([checkpoint.lat, checkpoint.lng]);
+    transitMarker?.getPopup().setContent(`<b>Current transit:</b> ${checkpoint.name}`).openPopup();
+    map?.panTo([checkpoint.lat, checkpoint.lng]);
+    const nextStage = DELIVERY_STAGES[Math.min(currentStepIndex, DELIVERY_STAGES.length - 1)];
+    const orders = store.orders();
+    const trackedOrder = orders.find(item=>item.id===orderId);
+    trackedOrder.deliveryStage = nextStage;
+    if (nextStage === 'delivered') trackedOrder.status = 'completed';
+    store.saveOrders(orders);
+    renderDynamicTimeline();
+    if (currentStepIndex === generatedCheckpoints.length - 1){
+      arrivalDrawer.classList.remove('hidden');
+      advanceButton.disabled = true;
+      advanceButton.textContent = 'Delivered';
+    }
+  };
+
+  overlay.querySelector('.delivery-schedule-form').onsubmit = e => { e.preventDefault(); toast('Delivery window confirmed. Local drivers have been notified.'); };
+
+  async function geocodeAddress(addressText){
+    try {
+      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encodeURIComponent(addressText)}`);
+      const data = await response.json();
+      if (!data.length) return null;
+      return {lat:parseFloat(data[0].lat), lng:parseFloat(data[0].lon), displayName:data[0].display_name.split(',')[0]};
+    } catch (error) {
+      console.warn('Geocoding address failed:', error);
+      return null;
+    }
+  }
+
+  async function reverseGeocodeCoords(lat, lng){
+    try {
+      const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=10`);
+      const data = await response.json();
+      return data.address?.county || data.address?.district || data.address?.state_district || data.address?.city || 'Transit Hub';
+    } catch {
+      return 'Transit Hub';
+    }
+  }
+
+  async function initializeDynamicTracker(){
+    if (!window.L) {
+      timeline.innerHTML = '<div class="tracking-loading">Map library unavailable. Showing delivery progress only.</div>';
+      generatedCheckpoints = [{name:source.split(',')[0],label:'Order picked up at farm'}, ...DELIVERY_STAGES.slice(1).map(s=>({name:DELIVERY_STAGE_LABELS[s],label:DELIVERY_STAGE_DESC[s]}))];
+      currentStepIndex = curIdx === DELIVERY_STAGES.length - 1 ? generatedCheckpoints.length - 1 : Math.min(curIdx, generatedCheckpoints.length - 1);
+      renderDynamicTimeline();
+      return;
+    }
+    const fallbackStart = {lat:10.787, lng:79.1378, displayName:source.split(',')[0]};
+    const fallbackEnd = {lat:13.0827, lng:80.2707, displayName:destination.split(',')[0]};
+    const [startLoc, endLoc] = await Promise.all([geocodeAddress(source), geocodeAddress(destinationCity)]);
+    const start = startLoc || fallbackStart;
+    const end = endLoc || fallbackEnd;
+    generatedCheckpoints = [{lat:start.lat,lng:start.lng,name:start.displayName,label:'Order picked up at farm'}];
+    const stepsCount = 5;
+    for (let index=1; index<stepsCount; index++) {
+      const ratio = index / stepsCount;
+      const lat = start.lat + (end.lat - start.lat) * ratio;
+      const lng = start.lng + (end.lng - start.lng) * ratio;
+      generatedCheckpoints.push({lat,lng,name:await reverseGeocodeCoords(lat,lng),label:'Transit hub'});
+    }
+    generatedCheckpoints.push({lat:end.lat,lng:end.lng,name:end.displayName,label:'Arrived at local sorting base'});
+    generatedCheckpoints = generatedCheckpoints.filter((item,index,list)=>index===0 || index===list.length-1 || item.name!==list[index-1].name);
+    map = L.map(`tracker-map-${orderId}`).setView([11.1271,78.6569],7);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
+    const route = L.polyline(generatedCheckpoints.map(point=>[point.lat,point.lng]),{color:'#2f7d4f',weight:4,dashArray:'6 12'}).addTo(map);
+    transitMarker = L.marker([start.lat,start.lng]).addTo(map).bindPopup(`<b>Current transit:</b> ${start.displayName}`).openPopup();
+    map.fitBounds(route.getBounds(),{padding:[40,40]});
+    currentStepIndex = curIdx === DELIVERY_STAGES.length - 1 ? generatedCheckpoints.length - 1 : Math.min(curIdx, generatedCheckpoints.length - 1);
+    renderDynamicTimeline();
+    setTimeout(()=>map.invalidateSize(),0);
+  }
+
+  initializeDynamicTracker();
 }
 
 // ===============================
@@ -1400,7 +1547,7 @@ function completeCheckout(){
   const u = getUser(currentUser);
   cart.forEach(c=>{
     orders.push({id:'o'+Date.now()+Math.random().toString(36).slice(2,5), farmer:c.farmer, consumer:u.name,
-      item:c.name, qty:c.qty, unit:c.unit, price:c.price*c.qty, address:u.address||'Address on file',
+      item:c.name, qty:c.qty, unit:c.unit, price:c.price*c.qty, city:u.city||cityFromAddress(u.address)||'Chennai', address:u.address||'Address on file',
       status:'pending', date:new Date().toISOString().slice(0,10),
       // DELIVERY TRACKING: every new order starts at "placed" and moves
       // forward through DELIVERY_STAGES as the farmer updates it.
@@ -1470,6 +1617,40 @@ function showFarmerProduce(uname){
 function renderConsumerBidding(root){
   root.innerHTML = `<div class="section-head"><h3>${t('bidding')}</h3><span class="muted">Bid on bulk produce lots</span></div><div id="cAuctions"></div>`;
   renderAuctionList(document.getElementById('cAuctions'), store.auctions(), true);
+}
+
+function renderConsumerProfile(root){
+  const u = getUser(currentUser);
+  root.innerHTML = `
+    <div class="section-head"><h3>${t('profile')}</h3><span class="muted">Your customer details</span></div>
+    <div class="card">
+      <div class="profile-head">
+        <div class="avatar">${u.name.split(' ').map(x=>x[0]).join('').slice(0,2)}</div>
+        <div>
+          <h3 style="font-size:20px;">${u.name}</h3>
+          <div class="order-sub">📞 ${u.phone}</div>
+        </div>
+      </div>
+      <div class="profile-address-block">
+        <div class="settings-row-label">📍 City name</div>
+        <input id="consumerCity" type="text" value="${u.city||''}" placeholder="e.g. Chennai">
+        <div class="settings-row-label" style="margin-top:14px;">🏠 Home address</div>
+        <div class="order-sub">The city is used to calculate the tracking route.</div>
+        <textarea id="consumerAddress" rows="3" placeholder="Enter your full home address">${u.address||''}</textarea>
+        <button class="btn-primary" id="saveConsumerProfile" style="margin-top:12px;">Save address</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('saveConsumerProfile').onclick = ()=>{
+    const city = document.getElementById('consumerCity').value.trim();
+    const address = document.getElementById('consumerAddress').value.trim();
+    if (!city || !address){ toast("⚠️ Enter both your city and home address"); return; }
+    const users = store.users();
+    users[currentUser].city = city;
+    users[currentUser].address = address;
+    store.saveUsers(users);
+    toast("✅ Home address updated");
+  };
 }
 
 // ===============================
