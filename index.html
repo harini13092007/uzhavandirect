@@ -3,6 +3,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Uzhavan Direct — Farm to Table, Direct</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -79,7 +80,7 @@
           <label>Enter OTP sent to your phone
             <input type="text" id="suOtp" placeholder="6-digit OTP" maxlength="6">
           </label>
-          <p class="auth-hint">Demo OTP: <b id="demoOtpDisplay"></b> (auto-filled for judges' convenience)</p>
+          <p class="auth-hint">Demo OTP: <b id="demoOtpDisplay"></b>
         </div>
 
         <button type="button" id="sendOtpBtn" class="btn-primary">Send OTP</button>
@@ -112,6 +113,10 @@
       <button id="menuToggle" class="menu-toggle">☰</button>
       <div class="topbar-title" id="viewTitle">Dashboard</div>
       <div class="topbar-right">
+        <button id="cartBtn" class="cart-btn-wrap hidden" type="button" title="View cart" aria-label="View cart" aria-expanded="false">
+          <span class="cart-icon">🛒</span>
+          <span class="cart-badge" id="cartBadge">0</span>
+        </button>
         <!-- LANGUAGE SELECTION: switches all UI text via I18N in app.js -->
         <select id="langSelect" class="lang-select">
           <option value="en">English</option>
@@ -130,6 +135,36 @@
         <div class="user-chip" id="userChip">👤 <span id="userChipName">User</span></div>
       </div>
     </header>
+
+    <div id="qtyModalOverlay" class="modal-overlay hidden" aria-hidden="true">
+      <section class="qty-modal" role="dialog" aria-modal="true" aria-labelledby="qtyModalTitle">
+        <button id="closeQtyModal" class="modal-close-btn" type="button" aria-label="Close quantity selector">✕</button>
+        <div class="qty-modal-emoji" id="qtyModalEmoji" aria-hidden="true">🌿</div>
+        <h3 id="qtyModalTitle">Select quantity</h3>
+        <p class="qty-modal-subtitle" id="qtyModalSubtitle"></p>
+        <div class="qty-picker-row">
+          <button id="btnQtyMinus" class="btn-qty-picker" type="button" aria-label="Decrease quantity">−</button>
+          <div class="qty-display-wrap"><span id="qtyPickerVal">1</span><span id="qtyPickerUnit" class="unit-label"></span></div>
+          <button id="btnQtyPlus" class="btn-qty-picker" type="button" aria-label="Increase quantity">+</button>
+        </div>
+        <button id="confirmQtyBtn" class="btn-confirm-qty" type="button">Add to cart · <span id="qtyTotalPrice">₹0</span></button>
+      </section>
+    </div>
+
+    <div id="cartOverlay" class="cart-overlay" aria-hidden="true"></div>
+    <aside id="cartDrawer" class="cart-drawer" role="dialog" aria-modal="true" aria-labelledby="cartDrawerTitle" aria-hidden="true">
+      <div class="drawer-header">
+        <div><span class="drawer-eyebrow">Uzhavan Direct</span><h3 id="cartDrawerTitle">Your basket</h3></div>
+        <button id="closeCartBtn" class="close-drawer-btn" type="button" title="Close cart" aria-label="Close cart">✕</button>
+      </div>
+      <div id="drawerItemsList" class="drawer-items-list"></div>
+      <div class="drawer-footer">
+        <div class="subtotal-row"><span>Subtotal</span><strong id="cartSubtotal">₹0</strong></div>
+        <p class="delivery-hint">Direct from local farmers · No middlemen commission</p>
+        <button id="checkoutBtn" class="btn-checkout" type="button" disabled>Proceed to checkout <span aria-hidden="true">→</span></button>
+        <button id="clearCartBtn" class="btn-clear-cart" type="button">Clear basket</button>
+      </div>
+    </aside>
 
     <!-- MAIN VIEW AREA: renderView() in app.js swaps this content
          based on which sidebar item is selected -->

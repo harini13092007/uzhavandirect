@@ -13,16 +13,19 @@
 const I18N = {
   en:{dashboard:"Dashboard",sellItem:"Sell Item",bidding:"Online Bidding",demand:"Demand Tracker",
       aiChat:"Farmer's AI Chat",settings:"Settings",itemsOrdered:"Items Ordered",cart:"Cart",
+      history:"History",
       nearby:"Nearby You",search:"Search",logout:"Log out",ordersPending:"Orders pending",
       ordersCompleted:"Orders completed",moneyReceived:"Total money received",moneySpent:"Money spent",
       profile:"Profile", welcome:"Welcome back"},
   ta:{dashboard:"டாஷ்போர்டு",sellItem:"பொருள் விற்பனை",bidding:"ஏலம்",demand:"தேவை கண்காணிப்பு",
       aiChat:"விவசாயி AI அரட்டை",settings:"அமைப்புகள்",itemsOrdered:"ஆர்டர் செய்யப்பட்ட பொருட்கள்",cart:"கார்ட்",
+      history:"ஆர்டர் வரலாறு",
       nearby:"அருகில் உள்ளவை",search:"தேடல்",logout:"வெளியேறு",ordersPending:"நிலுவையிலுள்ள ஆர்டர்கள்",
       ordersCompleted:"முடிக்கப்பட்ட ஆர்டர்கள்",moneyReceived:"பெறப்பட்ட மொத்த பணம்",moneySpent:"செலவிடப்பட்ட பணம்",
       profile:"சுயவிவரம்", welcome:"மீண்டும் வரவேற்கிறோம்"},
   hi:{dashboard:"डैशबोर्ड",sellItem:"वस्तु बेचें",bidding:"ऑनलाइन बोली",demand:"मांग ट्रैकर",
       aiChat:"किसान AI चैट",settings:"सेटिंग्स",itemsOrdered:"ऑर्डर किए गए आइटम",cart:"कार्ट",
+      history:"ऑर्डर इतिहास",
       nearby:"आस-पास",search:"खोजें",logout:"लॉग आउट",ordersPending:"लंबित ऑर्डर",
       ordersCompleted:"पूर्ण ऑर्डर",moneyReceived:"कुल प्राप्त राशि",moneySpent:"खर्च की गई राशि",
       profile:"प्रोफ़ाइल", welcome:"वापसी पर स्वागत है"}
@@ -476,6 +479,24 @@ document.getElementById('menuToggle').onclick = ()=>{
   document.querySelector('.sidebar').classList.toggle('open');
 };
 
+document.getElementById('cartBtn').onclick = openCartDrawer;
+document.getElementById('closeCartBtn').onclick = closeCartDrawer;
+document.getElementById('cartOverlay').onclick = closeCartDrawer;
+document.getElementById('clearCartBtn').onclick = ()=>{
+  if (!currentUser || currentRole!=='consumer') return;
+  store.saveCart(currentUser, []);
+  refreshCartViews();
+  toast('Basket cleared');
+};
+document.getElementById('checkoutBtn').onclick = ()=>{
+  if (!currentUser || !store.cart(currentUser).length) return;
+  closeCartDrawer();
+  openPaymentModal();
+};
+document.addEventListener('keydown', e=>{
+  if (e.key==='Escape' && document.getElementById('cartDrawer').classList.contains('open')) closeCartDrawer();
+});
+
 // Toggle the notifications dropdown open/closed.
 document.getElementById('notifBell').onclick = ()=>{
   const panel = document.getElementById('notifPanel');
@@ -509,6 +530,7 @@ const CONSUMER_NAV = [
   {id:'nearby', icon:'📍', key:'nearby'},
   {id:'bidding', icon:'⚖️', key:'bidding'},
   {id:'search', icon:'🔍', key:'search'},
+  {id:'history', icon:'🕘', key:'history'},
   {id:'profile', icon:'👤', key:'profile'},
   {id:'settings', icon:'⚙️', key:'settings'}
 ];
@@ -543,10 +565,13 @@ function money(n){ return '₹' + Number(n).toLocaleString('en-IN'); }
 
 /* ---------- Boot / routing ---------- */
 function boot(){
+  closeCartDrawer();
   if (currentUser){
     currentRole = getUser(currentUser).type;
     authScreen.classList.add('hidden');
     appShell.classList.remove('hidden');
+    document.getElementById('cartBtn').classList.toggle('hidden', currentRole!=='consumer');
+    renderCartDrawer();
     document.getElementById('userChipName').textContent = getUser(currentUser).name;
     currentView = 'dashboard';
     renderNav();
@@ -576,7 +601,7 @@ function renderView(viewId){
   } else {
     const map = {dashboard:renderConsumerDashboard, nearby:renderNearby, bidding:renderConsumerBidding,
       search:renderSearch, settings:renderConsumerSettings, itemsOrdered:renderItemsOrdered,
-      cart:renderCart, moneyTable:renderConsumerMoneyTable, following:renderFollowing,
+      history:renderOrderHistory, cart:renderCart, moneyTable:renderConsumerMoneyTable, following:renderFollowing,
       profile:renderConsumerProfile,
       farmerProfile:renderFarmerPublicProfile};
     (map[viewId]||renderConsumerDashboard)(root);
@@ -645,22 +670,50 @@ function produceCardEl(p, isOwner){
 // Older/seeded orders don't have a deliveryStage saved, so
 // getOrderStage() derives a sensible one from the existing status.
 // ===============================
-const DELIVERY_STAGES = ['placed','confirmed','packed','outForDelivery','delivered'];
+const DELIVERY_STAGES = ['placed','confirmed','packed','atFarmerCity','atCustomerCity','atFpo','outForDelivery','delivered'];
 const DELIVERY_STAGE_LABELS = {
   placed:'Order Placed', confirmed:'Order Confirmed', packed:'Packed',
-  outForDelivery:'Out for Delivery', delivered:'Delivered'
+  atFarmerCity:'Reached farmer city', atCustomerCity:'Reached destination',
+  atFpo:'Arrived at FPO office', outForDelivery:'Out for Delivery', delivered:'Delivered'
 };
 const DELIVERY_STAGE_DESC = {
   placed:'Your order has been placed.', confirmed:'Farmer has confirmed the order.',
-  packed:'Your produce has been packed.', outForDelivery:'Your order is on the way.',
-  delivered:'Your order has been delivered.'
+  packed:'Your produce has been packed.', atFarmerCity:'Your order has reached the farmer city.',
+  atCustomerCity:'Your order has reached its destination.',
+  atFpo:'Your order has reached the customer-city FPO office.',
+  outForDelivery:'Your order is on the way to your address.', delivered:'Your order has been delivered.'
 };
 // Returns this order's current delivery stage, falling back to a
 // reasonable guess (based on status) for orders saved before tracking existed.
 function getOrderStage(o){
+  if (o.deliveryStage === 'atFarmerFpo') return 'atFarmerCity';
+  if (o.deliveryStage === 'atCity') return 'atCustomerCity';
   if (o.deliveryStage) return o.deliveryStage;
   if (o.status === 'completed') return 'delivered';
   return 'placed';
+}
+function isDeliveredOrder(order){
+  return order.status!=='refunded' && (order.status==='completed' || getOrderStage(order)==='delivered');
+}
+function productForOrder(order){
+  const itemName = order.item || order.name;
+  return store.produce().find(product=>
+    (order.productId && product.id===order.productId) ||
+    (product.farmer===order.farmer && product.name===itemName)
+  );
+}
+function deliveryStageLabel(order, stage=getOrderStage(order)){
+  const farmerVillage = getUser(order.farmer)?.village || '';
+  const farmerCity = cityFromAddress(farmerVillage) || farmerVillage.split(',')[0].trim() || 'Farm';
+  const customerCity = customerCityForOrder(order) || 'Customer city';
+  if (stage==='atFarmerCity') return farmerCity;
+  if (stage==='atCustomerCity') return customerCity;
+  if (stage==='atFpo') return `${customerCity} FPO office`;
+  return DELIVERY_STAGE_LABELS[stage];
+}
+function customerCityForOrder(order){
+  const customer = Object.values(store.users()).find(user=>user.type==='consumer' && user.name===order.consumer);
+  return customer?.city?.trim() || order.city?.trim() || '';
 }
 // A short "FD1024"-style display code, so the tracking view has a
 // friendly order number instead of the raw internal id.
@@ -672,20 +725,51 @@ function cityFromAddress(address){
   const cities = ['Chennai','Salem','Coimbatore','Erode','Madurai','Trichy','Tiruchirappalli','Thanjavur'];
   return cities.find(city=>address.toLowerCase().includes(city.toLowerCase())) || '';
 }
-// Moves an order one step forward through DELIVERY_STAGES (Placed →
-// Confirmed → Packed → Out for Delivery → Delivered). Reaching
+const CITY_COORDINATES = {
+  chennai:{lat:13.0827,lon:80.2707},
+  salem:{lat:11.6643,lon:78.1460},
+  coimbatore:{lat:11.0168,lon:76.9558},
+  erode:{lat:11.3410,lon:77.7172},
+  madurai:{lat:9.9252,lon:78.1198},
+  trichy:{lat:10.7905,lon:78.7047},
+  tiruchirappalli:{lat:10.7905,lon:78.7047},
+  thanjavur:{lat:10.7870,lon:79.1378}
+};
+function coordinatesForCity(city){
+  if (!city) return null;
+  const normalized = city.toLowerCase().replace(/[^a-z]/g,'');
+  const cityName = Object.keys(CITY_COORDINATES)
+    .sort((a,b)=>b.length-a.length)
+    .find(name=>normalized.includes(name));
+  return cityName ? CITY_COORDINATES[cityName] : null;
+}
+function distanceBetweenCitiesKm(fromCity,toCity){
+  const from = coordinatesForCity(fromCity);
+  const to = coordinatesForCity(toCity);
+  if (!from || !to) return null;
+  const radians = degrees=>degrees*Math.PI/180;
+  const latDelta = radians(to.lat-from.lat);
+  const lonDelta = radians(to.lon-from.lon);
+  const a = Math.sin(latDelta/2)**2 + Math.cos(radians(from.lat))*Math.cos(radians(to.lat))*Math.sin(lonDelta/2)**2;
+  return 6371*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+// Moves an order one step forward through DELIVERY_STAGES. Reaching
 // "delivered" also marks the order status "completed" so it's counted
 // in Money Received / Orders Completed, same as before tracking existed.
 function advanceOrderStage(orderId){
   const orders = store.orders();
   const o = orders.find(x=>x.id===orderId);
   if (!o) return;
+  if (getOrderStage(o)==='atFpo' && !o.fpoDeliveryTiming){
+    toast('Choose a delivery time in order tracking before dispatch.');
+    return;
+  }
   const idx = DELIVERY_STAGES.indexOf(getOrderStage(o));
   const next = DELIVERY_STAGES[Math.min(idx+1, DELIVERY_STAGES.length-1)];
   o.deliveryStage = next;
   if (next === 'delivered') o.status = 'completed';
   store.saveOrders(orders);
-  toast(`📦 Order ${orderDisplayId(o)} → ${DELIVERY_STAGE_LABELS[next]}`);
+  toast(`📦 Order ${orderDisplayId(o)} → ${deliveryStageLabel(o,next)}`);
   renderView(currentView);
 }
 // Builds and shows the Amazon-style vertical delivery timeline for one
@@ -695,26 +779,297 @@ function openTrackingModal(orderId){
   if (!o) return;
   const stage = getOrderStage(o);
   const curIdx = DELIVERY_STAGES.indexOf(stage);
+  const orderedProduct = productForOrder(o);
+  const farmer = getUser(orderedProduct?.farmer || o.farmer);
+  const currentCustomer = getUser(currentUser);
+  const customer = currentCustomer?.type==='consumer' && currentCustomer.name===o.consumer
+    ? currentCustomer
+    : Object.values(store.users()).find(user=>user.type==='consumer' && user.name===o.consumer);
+  const destinationAddress = customer?.address || o.address || '';
+  const destinationCity = customer?.city?.trim() || o.city || 'Customer city';
+  const farmerLocation = [farmer?.village,orderedProduct?.farmAddress,orderedProduct?.location,o.farmAddress]
+    .map(location=>String(location||'').trim())
+    .find(location=>location && !/^(not set|unknown|n\/a|village not set|farm location)(?:\b|,)/i.test(location)) || '';
+  const farmAddress = farmerLocation;
+  const farmerCityName = cityFromAddress(farmerLocation) || farmerLocation.split(',')[0].trim();
+  const customerFpoAddress = o.fpoAddress || `FPO office, ${destinationCity}, Tamil Nadu`;
   const overlay = document.createElement('div'); overlay.className='modal-overlay';
-  overlay.innerHTML = `<div class="modal-box">
-    <h3 style="font-size:19px;">📦 Order #${orderDisplayId(o)}</h3>
-    <p style="color:var(--ink-soft);font-size:13.5px;margin-top:2px;">${o.item} · Quantity: ${o.qty}${o.unit} · Total: ${money(o.price)}</p>
-    <p style="color:var(--ink-soft);font-size:13px;margin-top:2px;">Tracking city: ${o.city || cityFromAddress(o.address) || 'Chennai'}</p>
-    <div class="section-head" style="margin-top:14px;margin-bottom:2px;"><h3 style="font-size:14px;">Delivery Status</h3></div>
-    <div class="tracking-timeline">
-      ${DELIVERY_STAGES.map((s,i)=>`
-        <div class="tracking-step ${i<curIdx?'done':i===curIdx?'current':'upcoming'}">
-          <div class="tracking-dot">${i<curIdx?'✓':i===curIdx?'●':'○'}</div>
-          <div class="tracking-text">
-            <div class="tracking-label">${DELIVERY_STAGE_LABELS[s]}</div>
-            <div class="tracking-desc">${DELIVERY_STAGE_DESC[s]}</div>
+  overlay.innerHTML = `<div class="tracker-modal">
+    <header class="tracker-header">
+      <div><p class="eyebrow">Live order tracking</p><h3>Order tracking</h3>
+        <p class="tracker-order-meta">Order #${orderDisplayId(o)} · ${o.item} · ${o.qty}${o.unit} · ${money(o.price)}</p></div>
+      <button class="icon-close" id="closeTracking" type="button" aria-label="Close tracking">✕</button>
+    </header>
+    <div class="tracker-layout">
+      <section class="tracker-sidebar">
+        <div id="dynamic-tracking-timeline" class="tracking-timeline"></div>
+        <div class="tracker-actions"><span class="status-label">Current status: <strong id="trackerStatusLabel"></strong></span>
+          <button class="btn-primary tracker-advance" id="btnSimulateStep" type="button" disabled>Advance tracking</button>
+        </div>
+      </section>
+      <section class="tracker-map-column">
+        <p id="routeMessage" class="tracker-route-message" role="status" hidden></p>
+        <div id="routeStatsHUD" class="stats-hud hidden">
+          <div class="stat-pill"><span>Road distance</span><strong id="statDistance">—</strong></div>
+          <div class="stat-pill"><span>Estimated travel time</span><strong id="statDuration">—</strong></div>
+          <div class="stat-pill"><span>City route</span><strong>${farmerCityName} → ${destinationCity}</strong></div>
+        </div>
+        <div id="liveTrackingMap" class="tracker-map"></div>
+        <section id="fpoDispatchCard" class="arrival-drawer hidden">
+          <div class="arrival-icon" aria-hidden="true">🏢</div><div>
+            <h4>Order reached ${destinationCity} FPO office</h4>
+            <p>Choose a delivery time for ${destinationCity}.</p>
+            <form id="frmFpoSchedule" class="delivery-schedule-form" data-schedule="fpo">
+              <label>Delivery time<select class="schedule-choice" required><option value="" disabled selected>Choose a time</option><option value="morning">Morning (8:00 AM–11:00 AM)</option><option value="afternoon">Afternoon (1:00 PM–4:00 PM)</option><option value="evening">Evening (5:00 PM–8:00 PM)</option><option value="custom">Custom timing</option></select></label>
+              <div class="custom-time-wrap hidden">
+                <label>Delivery date<input class="custom-date-input" type="text" inputmode="numeric" placeholder="DD/MM" maxlength="5" autocomplete="off"></label>
+                <label>Delivery time<input class="custom-time-input" type="time"></label>
+              </div>
+              <button class="btn-success" type="submit">Confirm delivery time</button>
+              <p class="schedule-saved hidden" role="status"></p>
+            </form>
           </div>
-        </div>`).join('')}
+        </section>
+      </section>
     </div>
-    <button class="pill-btn" id="closeTracking" style="width:100%;margin-top:16px;">Close</button>
   </div>`;
   document.body.appendChild(overlay);
   overlay.querySelector('#closeTracking').onclick = ()=> overlay.remove();
+
+  const timeline = overlay.querySelector('#dynamic-tracking-timeline');
+  const advanceButton = overlay.querySelector('#btnSimulateStep');
+  const statusLabel = overlay.querySelector('#trackerStatusLabel');
+  const routeMessage = overlay.querySelector('#routeMessage');
+  const fpoCard = overlay.querySelector('#fpoDispatchCard');
+  let map = null;
+  let routeStops = [];
+  let routeCoordinates = [];
+  let currentRouteStage = Math.max(0,curIdx);
+
+  function renderTrackingProgress(){
+    timeline.innerHTML = DELIVERY_STAGES.map((deliveryStage,index)=>{
+      const state = index<currentRouteStage?'done':index===currentRouteStage?'current':'upcoming';
+      const label = deliveryStageLabel(o,deliveryStage);
+      const description = deliveryStage==='atFarmerCity' ? `From ${farmerCityName}.`
+        : deliveryStage==='atCustomerCity' ? `Order arrived in ${destinationCity}.`
+        : deliveryStage==='atFpo' ? currentRouteStage<index
+          ? `Delivery time can be chosen after arrival at the ${destinationCity} FPO office.`
+          : currentRouteStage===index
+            ? `Order arrived at the ${destinationCity} FPO office. Choose a delivery time to continue.`
+            : `Delivery time confirmed; order dispatched from the ${destinationCity} FPO office.`
+        : DELIVERY_STAGE_DESC[deliveryStage];
+      return `<div class="tracking-step ${state}"><div class="tracking-dot">${index<currentRouteStage?'✓':index===currentRouteStage?'●':'○'}</div>
+        <div class="tracking-text"><div class="tracking-label">${label}</div><div class="tracking-desc">${description}</div></div></div>`;
+    }).join('');
+    const currentStage = DELIVERY_STAGES[currentRouteStage];
+    statusLabel.textContent = DELIVERY_STAGE_LABELS[currentStage];
+    fpoCard.classList.toggle('hidden',currentStage!=='atFpo');
+    advanceButton.disabled = !routeStops.length || currentRouteStage>=DELIVERY_STAGES.length-1 ||
+      (currentStage==='atFpo' && !o.fpoDeliveryTiming);
+      advanceButton.textContent = currentRouteStage>=DELIVERY_STAGES.length-1 ? 'Delivered' : 'Advance tracking';
+    advanceButton.textContent = currentRouteStage>=DELIVERY_STAGES.length-1 ? 'Delivered' : 'Advance tracking';
+  }
+
+  function wireScheduleForm(form){
+    const select = form.querySelector('.schedule-choice');
+    const customWrap = form.querySelector('.custom-time-wrap');
+    const customInput = form.querySelector('.custom-time-input');
+      const customDate = form.querySelector('.custom-date-input');
+    const savedMessage = form.querySelector('.schedule-saved');
+    const property = 'fpoDeliveryTiming';
+    const existing = o[property];
+    if (existing){
+      select.value = existing.type;
+      if (existing.type==='custom'){
+        customWrap.classList.remove('hidden');
+        customDate.required = true;
+        customInput.required = true;
+        const savedValue = existing.value || '';
+        const legacyValue = savedValue.match(/^\d{4}-(\d{2})-(\d{2})T(\d{2}:\d{2})/);
+        const [savedDate,savedTime] = savedValue.split('|');
+        customDate.value = legacyValue ? `${legacyValue[2]}/${legacyValue[1]}` : savedDate || '';
+        customInput.value = legacyValue ? legacyValue[3] : savedTime || '';
+      }
+      savedMessage.textContent = `Saved: ${existing.label}`;
+      savedMessage.classList.remove('hidden');
+    }
+    select.onchange = ()=>{
+      const isCustom = select.value==='custom';
+      customWrap.classList.toggle('hidden',!isCustom);
+      customDate.required = isCustom;
+      customInput.required = isCustom;
+      if (isCustom) customDate.focus();
+    };
+    form.onsubmit = event=>{
+      event.preventDefault();
+      const isCustom = select.value==='custom';
+      if (!select.value) return;
+      if (isCustom){
+        const dateMatch = customDate.value.match(/^(\d{2})\/(\d{2})$/);
+        if (!dateMatch || Number(dateMatch[1])<1 || Number(dateMatch[1])>31 || Number(dateMatch[2])<1 || Number(dateMatch[2])>12 || !customInput.value){
+          toast('Enter the date as DD/MM and choose a time.');
+          return;
+        }
+        const maximumDay = new Date(2024,Number(dateMatch[2]),0).getDate();
+        if (Number(dateMatch[1])>maximumDay){
+          toast('Enter a valid date as DD/MM.');
+          return;
+        }
+      }
+      const optionLabel = select.selectedOptions[0].textContent;
+      const customValue = `${customDate.value}|${customInput.value}`;
+      const timing = {type:select.value,value:isCustom?customValue:'',label:isCustom?`${customDate.value} at ${customInput.value}`:optionLabel};
+      const orders = store.orders();
+      const trackedOrder = orders.find(order=>order.id===orderId);
+      if (!trackedOrder) return;
+      trackedOrder[property] = timing;
+      store.saveOrders(orders);
+      o[property] = timing;
+      savedMessage.textContent = `Saved: ${timing.label}`;
+      savedMessage.classList.remove('hidden');
+      renderTrackingProgress();
+      toast('Delivery time saved.');
+    };
+  }
+  wireScheduleForm(overlay.querySelector('#frmFpoSchedule'));
+
+  advanceButton.onclick = ()=>{
+    if (advanceButton.disabled) return;
+    currentRouteStage = Math.min(currentRouteStage+1,DELIVERY_STAGES.length-1);
+    const stageName = DELIVERY_STAGES[currentRouteStage];
+    const stopIndex = stageName==='atFarmerCity' ? 1 : stageName==='atCustomerCity' ? 2 : stageName==='atFpo' ? 3 : stageName==='outForDelivery' || stageName==='delivered' ? 4 : 0;
+    const stop = routeStops[stopIndex];
+    if (stop && map){
+      map.panTo([stop.lat,stop.lon]);
+      routeCoordinates.forEach((point,index)=>{
+        const isCurrent = index===stopIndex;
+        point.marker.setOpacity(isCurrent?1:.65);
+      });
+    }
+    const orders = store.orders();
+    const trackedOrder = orders.find(order=>order.id===orderId);
+    if (trackedOrder){
+      trackedOrder.deliveryStage = stageName;
+      if (stageName==='delivered') trackedOrder.status='completed';
+      store.saveOrders(orders);
+      o.deliveryStage = stageName;
+    }
+    renderTrackingProgress();
+  };
+
+  function fallbackCoordinates(address){
+    const city = cityFromAddress(address);
+    const coords = coordinatesForCity(city);
+    return coords ? {lat:coords.lat,lon:coords.lon,label:city} : null;
+  }
+
+  async function geocodeLocation(address){
+    try{
+      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encodeURIComponent(address)}`);
+      if (!response.ok) return null;
+      const results = await response.json();
+      if (!results.length) return null;
+      return {lat:Number(results[0].lat),lon:Number(results[0].lon),label:results[0].display_name.split(',')[0]};
+    } catch (error){ return null; }
+  }
+
+  async function initializeRoadRoute(){
+    const customerCity=destinationCity;
+    const customerAddress=destinationAddress || destinationCity;
+    if (!farmAddress || !farmerCityName){
+      routeMessage.hidden=false;
+      routeMessage.textContent='Tracking needs a farm location in the farmer profile.';
+      return;
+    }
+    const locations=[farmAddress,farmerCityName,customerCity,customerFpoAddress,customerAddress];
+    if (!window.L){
+      routeMessage.hidden=false;
+      routeMessage.textContent='The map library is unavailable. Delivery status remains available, but a road map cannot be loaded.';
+      return;
+    }
+    routeMessage.hidden=false;
+    routeMessage.textContent='Loading delivery tracking…';
+    try{
+      const locationResults=[];
+      for (let index=0;index<locations.length;index++){
+        let addressToGeocode=locations[index];
+        if (index<=1 && !/tamil\s*nadu|india/i.test(addressToGeocode)){
+          addressToGeocode=`${addressToGeocode}, Tamil Nadu, India`;
+        } else if (index===4 && !addressToGeocode.toLowerCase().includes(customerCity.toLowerCase())){
+          addressToGeocode=`${addressToGeocode}, ${customerCity}, Tamil Nadu, India`;
+        }
+        let result=index===1 || index===2 ? fallbackCoordinates(locations[index])
+          : index===3 ? locationResults[2]
+          : null;
+        if (!result) result=await geocodeLocation(addressToGeocode);
+        if (!result) result=fallbackCoordinates(locations[index]);
+        if (!result) throw new Error(`Could not locate ${locations[index]}. Add a Tamil Nadu city to the address and retry.`);
+        locationResults.push(result);
+        if (index<locations.length-1) await new Promise(resolve=>window.setTimeout(resolve,1100));
+      }
+      const farmerCity=locationResults[1];
+      const customerCityPoint=locationResults[2];
+      const customerFpo=locationResults[3];
+      const home=locationResults[4];
+      routeStops=[
+        {...locationResults[0],name:'Farm pickup'},
+        {...farmerCity,name:farmerCityName},
+        {...customerCityPoint,name:destinationCity},
+        {...customerFpo,name:`${destinationCity} FPO office`},
+        {...home,name:'Customer address'}
+      ];
+      const routeWaypoints=routeStops.reduce((waypoints,stop)=>{
+        const previous=waypoints[waypoints.length-1];
+        if (!previous || Math.abs(previous.lat-stop.lat)>0.00001 || Math.abs(previous.lon-stop.lon)>0.00001){
+          waypoints.push(stop);
+        }
+        return waypoints;
+      },[]);
+      if (routeWaypoints.length<2) throw new Error('Could not build a road route between the farmer and customer cities.');
+      const coordinateList=routeWaypoints.map(stop=>`${stop.lon},${stop.lat}`).join(';');
+      const routeResponse=await fetch(`https://router.project-osrm.org/route/v1/driving/${coordinateList}?overview=full&geometries=geojson&steps=false`);
+      const routeData=await routeResponse.json();
+      if (!routeResponse.ok || routeData.code!=='Ok' || !routeData.routes?.length) throw new Error('Road routing service could not find a route for these locations.');
+      const roadRoute=routeData.routes[0];
+      const distanceKm=roadRoute.distance/1000;
+      const durationMinutes=Math.round(roadRoute.duration/60);
+      overlay.querySelector('#statDistance').textContent=`${distanceKm.toFixed(1)} km`;
+      overlay.querySelector('#statDuration').textContent=durationMinutes<60
+        ? `${durationMinutes} min`
+        : `${Math.floor(durationMinutes/60)} hr ${durationMinutes%60} min`;
+      overlay.querySelector('#routeStatsHUD').classList.remove('hidden');
+      if (map) map.remove();
+      map=L.map(overlay.querySelector('#liveTrackingMap')).setView([routeStops[0].lat,routeStops[0].lon],7);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
+      const line=L.geoJSON(roadRoute.geometry,{style:{color:'#16794b',weight:5,opacity:.86}}).addTo(map);
+      routeCoordinates=routeStops.map((stop,index)=>{
+        const marker=L.marker([stop.lat,stop.lon]).addTo(map).bindPopup(stop.name);
+        return {marker,index};
+      });
+      map.fitBounds(line.getBounds(),{padding:[28,28]});
+      const orders=store.orders();
+      const trackedOrder=orders.find(order=>order.id===orderId);
+      if (trackedOrder){
+        trackedOrder.productId ||= orderedProduct?.id;
+        trackedOrder.farmAddress=locations[0];
+        trackedOrder.city=customerCity;
+        trackedOrder.fpoAddress=locations[3];
+        trackedOrder.address=locations[4];
+        store.saveOrders(orders);
+      }
+      advanceButton.disabled=false;
+      renderTrackingProgress();
+      routeMessage.hidden=true;
+      routeMessage.textContent='';
+      window.setTimeout(()=>map?.invalidateSize(),100);
+    } catch(error){
+      routeMessage.hidden=false;
+      routeMessage.textContent=error.message || 'Could not calculate this route. Check the addresses and try again.';
+    }
+  }
+
+  renderTrackingProgress();
+  initializeRoadRoute();
 }
 
 // ===============================
@@ -730,16 +1085,17 @@ function renderPendingOrders(root){
   pending.forEach(o=>{
     const stage = getOrderStage(o);
     const nextIdx = Math.min(DELIVERY_STAGES.indexOf(stage)+1, DELIVERY_STAGES.length-1);
-    const nextLabel = DELIVERY_STAGE_LABELS[DELIVERY_STAGES[nextIdx]];
+    const nextLabel = deliveryStageLabel(o,DELIVERY_STAGES[nextIdx]);
+    const waitingForDeliveryTime = stage==='atFpo' && !o.fpoDeliveryTiming;
     const row = document.createElement('div'); row.className = 'order-row';
     row.innerHTML = `
       <div>
-        <div class="order-item-name">${o.item} × ${o.qty}${o.unit} <span class="badge">${DELIVERY_STAGE_LABELS[stage]}</span></div>
+        <div class="order-item-name">${o.item} × ${o.qty}${o.unit} <span class="badge">${deliveryStageLabel(o,stage)}</span></div>
         <div class="order-sub">From ${o.consumer} · ${o.address}</div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;">
         <span class="produce-price" style="font-size:15px;">${money(o.price)}</span>
-        <button class="pill-btn" data-a="advance">${stage==='delivered' ? 'Delivered' : '→ '+nextLabel}</button>
+        <button class="pill-btn" data-a="advance" ${waitingForDeliveryTime||stage==='delivered'?'disabled':''}>${waitingForDeliveryTime?'Waiting for delivery time':stage==='delivered' ? 'Delivered' : '→ '+nextLabel}</button>
         <button class="pill-btn danger" data-a="refund">Refund</button>
       </div>`;
     row.querySelector('[data-a="advance"]').onclick = ()=> advanceOrderStage(o.id);
@@ -1267,26 +1623,24 @@ function renderFarmerSettings(root){
  * ======================================================================= */
 function renderConsumerDashboard(root){
   const orders = store.orders().filter(o=>o.consumer===getUser(currentUser).name);
-  const cart = store.cart(currentUser);
+  const activeOrders = orders.filter(order=>order.status!=='refunded' && !isDeliveredOrder(order));
   // Money Spent = product purchases + any donations this consumer has made.
   const spent = orders.reduce((s,o)=>s+o.price,0) + consumerDonationsTotal(currentUser);
   root.innerHTML = `
     <div class="stat-strip">
-      <div class="stat-cell" id="cellItems"><span class="stat-num">${orders.length}</span><span class="stat-label">${t('itemsOrdered')}</span></div>
-      <div class="stat-cell" id="cellCart"><span class="stat-num">${cart.length}</span><span class="stat-label">${t('cart')}</span></div>
-      <div class="stat-cell" id="cellSpent"><span class="stat-num">${money(spent)}</span><span class="stat-label">${t('moneySpent')}</span></div>
+      <button class="stat-cell" id="cellActiveOrders" type="button"><span class="stat-num">${activeOrders.length}</span><span class="stat-label">${t('itemsOrdered')}</span></button>
+      <button class="stat-cell" id="cellSpent" type="button"><span class="stat-num">${money(spent)}</span><span class="stat-label">${t('moneySpent')}</span></button>
     </div>
     <div class="section-head"><h3>Fresh from nearby farmers</h3><span class="muted">Within 10km</span></div>
     <div class="produce-grid" id="featured"></div>
   `;
-  document.getElementById('cellItems').onclick = ()=> goTo('itemsOrdered');
-  document.getElementById('cellCart').onclick = ()=> goTo('cart');
+  document.getElementById('cellActiveOrders').onclick = ()=> goTo('itemsOrdered');
   document.getElementById('cellSpent').onclick = ()=> goTo('moneyTable');
   const grid = document.getElementById('featured');
   store.produce().filter(p=>!p.sold).slice(0,4).forEach(p=>{
     const el = produceCardEl(p,false);
     const btn = document.createElement('button'); btn.className='pill-btn'; btn.style.margin='10px 14px 14px'; btn.textContent='Add to cart';
-    btn.onclick = ()=> addToCart(p,1);
+    btn.onclick = ()=> openCartQuantityPicker(p,1,el.querySelector('.produce-img'));
     el.appendChild(btn);
     grid.appendChild(el);
   });
@@ -1295,44 +1649,243 @@ function renderConsumerDashboard(root){
 function addToCart(p, qty){
   const cart = store.cart(currentUser);
   const existing = cart.find(c=>c.name===p.name && c.farmer===p.farmer);
-  if (existing) existing.qty += qty;
-  else cart.push({id:'c'+Date.now(), name:p.name, icon:p.icon, qty, unit:p.unit, price:p.price, farmer:p.farmer});
+  if (existing){
+    existing.qty += qty;
+    existing.productId ||= p.id;
+  } else cart.push({id:'c'+Date.now(), productId:p.id, name:p.name, icon:p.icon, qty, unit:p.unit, price:p.price, farmer:p.farmer});
   store.saveCart(currentUser, cart);
+  renderCartDrawer();
   toast(`🛒 Added ${p.name} to cart`);
+  playCartPopSound();
+}
+
+let pendingCartProduct = null;
+let pendingCartSource = null;
+let currentCartPickerQty = 1;
+let cartAudioContext = null;
+let resumeCheckoutAfterProfileSave = false;
+
+function openCartQuantityPicker(product, initialQty=1, sourceElement=null){
+  if (currentRole!=='consumer') return;
+  pendingCartProduct = product;
+  pendingCartSource = sourceElement;
+  currentCartPickerQty = Math.max(1,Number(initialQty)||1);
+  document.getElementById('qtyModalEmoji').textContent = product.icon || '🌿';
+  document.getElementById('qtyModalTitle').textContent = product.name;
+  document.getElementById('qtyModalSubtitle').textContent = `${money(product.price)} / ${product.unit}`;
+  document.getElementById('qtyPickerUnit').textContent = product.unit;
+  updateCartPickerDisplay();
+  const modal = document.getElementById('qtyModalOverlay');
+  modal.classList.remove('hidden');
+  modal.setAttribute('aria-hidden','false');
+  document.getElementById('confirmQtyBtn').focus();
+}
+
+function closeCartQuantityPicker(){
+  const modal = document.getElementById('qtyModalOverlay');
+  modal.classList.add('hidden');
+  modal.setAttribute('aria-hidden','true');
+  pendingCartProduct = null;
+  pendingCartSource = null;
+}
+
+function updateCartPickerDisplay(){
+  document.getElementById('qtyPickerVal').textContent = currentCartPickerQty;
+  document.getElementById('qtyTotalPrice').textContent = money(pendingCartProduct.price*currentCartPickerQty);
+}
+
+function getCartAudioContext(){
+  if (!cartAudioContext){
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return null;
+    cartAudioContext = new AudioContextClass();
+  }
+  if (cartAudioContext.state==='suspended') cartAudioContext.resume();
+  return cartAudioContext;
+}
+
+function playCartPopSound(){
+  try{
+    const context = getCartAudioContext();
+    if (!context) return;
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.type='sine';
+    oscillator.frequency.setValueAtTime(400,context.currentTime);
+    oscillator.frequency.exponentialRampToValueAtTime(880,context.currentTime+.08);
+    gain.gain.setValueAtTime(.12,context.currentTime);
+    gain.gain.exponentialRampToValueAtTime(.001,context.currentTime+.08);
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.start();
+    oscillator.stop(context.currentTime+.08);
+  } catch{}
+}
+
+function playCheckoutChime(){
+  try{
+    const context = getCartAudioContext();
+    if (!context) return;
+    [[523.25,0,.15],[659.25,.12,.25]].forEach(([frequency,offset,duration])=>{
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      const startTime = context.currentTime+offset;
+      oscillator.type='triangle';
+      oscillator.frequency.setValueAtTime(frequency,startTime);
+      gain.gain.setValueAtTime(.16,startTime);
+      gain.gain.exponentialRampToValueAtTime(.001,startTime+duration);
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+      oscillator.start(startTime);
+      oscillator.stop(startTime+duration);
+    });
+  } catch{}
+}
+
+function animateAddToCart(sourceElement,onComplete){
+  const cartButton = document.getElementById('cartBtn');
+  if (!sourceElement || !cartButton){ onComplete(); return; }
+  const sourceRect = sourceElement.getBoundingClientRect();
+  const targetRect = cartButton.getBoundingClientRect();
+  const flyer = document.createElement('div');
+  flyer.className='cart-flying-item';
+  flyer.textContent = sourceElement.textContent.trim() || '🌿';
+  flyer.style.left=`${sourceRect.left+sourceRect.width/2}px`;
+  flyer.style.top=`${sourceRect.top+sourceRect.height/2}px`;
+  document.body.appendChild(flyer);
+  let completed = false;
+  const finish = ()=>{
+    if (completed) return;
+    completed = true;
+    flyer.remove();
+    cartButton.classList.remove('catching');
+    onComplete();
+  };
+  flyer.addEventListener('transitionend',event=>{
+    if (event.propertyName==='transform') finish();
+  });
+  window.setTimeout(finish,850);
+  window.setTimeout(()=>cartButton.classList.add('catching'),220);
+  requestAnimationFrame(()=>{
+    flyer.style.left=`${targetRect.left+targetRect.width/2}px`;
+    flyer.style.top=`${targetRect.top+targetRect.height/2}px`;
+    flyer.classList.add('in-flight');
+  });
 }
 
 function renderItemsOrdered(root){
-  const orders = store.orders().filter(o=>o.consumer===getUser(currentUser).name);
-  root.innerHTML = `<div class="section-head"><h3>📦 ${t('itemsOrdered')} / Track Delivery</h3></div><div class="card" id="ordList"></div>`;
-  const list = document.getElementById('ordList');
-  if (!orders.length){ list.innerHTML = `<div class="empty-state"><div class="glyph">📦</div>No orders yet — browse "Nearby You" or "Search" to start.</div>`; return; }
-  orders.forEach(o=>{
-    const farmerUser = getUser(o.farmer);
+  const orders = store.orders().filter(order=>
+    order.consumer===getUser(currentUser).name && order.status!=='refunded' && !isDeliveredOrder(order)
+  );
+  root.innerHTML = `<div class="section-head"><h3>${t('itemsOrdered')}</h3><span class="muted">Track active deliveries</span></div><div class="card" id="activeOrderList"></div>`;
+  renderActiveOrderRows(document.getElementById('activeOrderList'),orders);
+}
+
+document.getElementById('btnQtyMinus').onclick = ()=>{
+  currentCartPickerQty = Math.max(1,currentCartPickerQty-1);
+  updateCartPickerDisplay();
+};
+document.getElementById('btnQtyPlus').onclick = ()=>{
+  currentCartPickerQty++;
+  updateCartPickerDisplay();
+};
+document.getElementById('closeQtyModal').onclick = closeCartQuantityPicker;
+document.getElementById('qtyModalOverlay').onclick = event=>{
+  if (event.target===event.currentTarget) closeCartQuantityPicker();
+};
+document.getElementById('confirmQtyBtn').onclick = ()=>{
+  if (!pendingCartProduct) return;
+  const product = pendingCartProduct;
+  const quantity = currentCartPickerQty;
+  const sourceElement = pendingCartSource;
+  closeCartQuantityPicker();
+  animateAddToCart(sourceElement,()=>addToCart(product,quantity));
+};
+
+function groupOrdersByFarmerProduct(orders){
+  const groups = new Map();
+  orders.forEach(order=>{
+    const productName = String(order.item||order.name||'').trim();
+    const unit = String(order.unit||'').trim();
+    const key = `${order.farmer}|${productName.toLowerCase()}|${unit.toLowerCase()}`;
+    if (!groups.has(key)) groups.set(key,{farmer:order.farmer,item:productName,unit,orders:[]});
+    groups.get(key).orders.push(order);
+  });
+  return [...groups.values()].map(group=>({
+    ...group,
+    orders:group.orders.sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))),
+    quantity:group.orders.reduce((total,order)=>total+Number(order.qty||0),0),
+    total:group.orders.reduce((total,order)=>total+Number(order.price||0),0)
+  }));
+}
+
+function renderActiveOrderRows(list,orders){
+  if (!orders.length){ list.innerHTML = `<div class="empty-state"><div class="glyph">📦</div>No active orders.</div>`; return; }
+  orders.forEach(order=>{
+    const farmerUser = getUser(order.farmer);
     const row = document.createElement('div'); row.className='order-row';
     row.innerHTML = `<div style="display:flex;gap:12px;align-items:center;">
-        <div class="avatar" style="width:40px;height:40px;font-size:14px;">${(farmerUser?.name||o.farmer).split(' ').map(x=>x[0]).join('').slice(0,2)}</div>
+        <div class="avatar" style="width:40px;height:40px;font-size:14px;">${(farmerUser?.name||order.farmer).split(' ').map(x=>x[0]).join('').slice(0,2)}</div>
         <div>
-          <div class="order-item-name">${o.item} × ${o.qty}${o.unit}</div>
-          <div class="order-sub">Sold by ${farmerUser?.name || o.farmer} · ${o.date}</div>
+          <div class="order-item-name">${order.item} × ${order.qty}${order.unit}</div>
+          <div class="order-sub">Sold by ${farmerUser?.name || order.farmer} · ${order.date||''}</div>
         </div>
       </div>
       <div style="text-align:right;display:flex;gap:10px;align-items:center;">
         <div>
-          <div class="produce-price" style="font-size:15px;">${money(o.price)}</div>
-          <span class="badge" style="margin-top:4px;">${o.status==='refunded' ? 'Refunded' : DELIVERY_STAGE_LABELS[getOrderStage(o)]}</span>
+          <div class="produce-price" style="font-size:15px;">${money(order.price)}</div>
+          <span class="badge" style="margin-top:4px;">${deliveryStageLabel(order)}</span>
         </div>
-        ${o.status!=='refunded' ? `<button class="pill-btn" data-a="track">📦 Track Delivery</button>` : ''}
+        <button class="pill-btn" data-a="track">📦 Track Delivery</button>
       </div>`;
-    if (o.status!=='refunded') row.querySelector('[data-a="track"]').onclick = ()=> openTrackingModal(o.id);
+    row.querySelector('[data-a="track"]').onclick = ()=>openTrackingModal(order.id);
+    list.appendChild(row);
+  });
+}
+
+function renderOrderHistory(root){
+  const orders = store.orders()
+    .filter(order=>order.consumer===getUser(currentUser).name && isDeliveredOrder(order))
+    .sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+  root.innerHTML = `<div class="section-head"><h3>${t('history')}</h3></div><div class="card" id="historyList"></div>`;
+  const list = document.getElementById('historyList');
+  if (!orders.length){
+    list.innerHTML = `<div class="empty-state"><div class="glyph">🕘</div>No delivered orders yet.</div>`;
+    return;
+  }
+  groupOrdersByFarmerProduct(orders).forEach(group=>{
+    const latestOrder = group.orders[0];
+    const farmer = getUser(group.farmer);
+    const product = productForOrder(latestOrder);
+    const available = product && !product.sold && Number(product.qty)>0;
+    const row = document.createElement('div');
+    row.className='order-row';
+    row.innerHTML = `<div>
+        <div class="order-item-name">${group.item} × ${group.quantity}${group.unit}</div>
+        <div class="order-sub">Sold by ${farmer?.name||group.farmer} · Ordered ${group.orders.length} ${group.orders.length===1?'time':'times'} · Last delivered ${latestOrder.date||''}</div>
+        <div class="produce-price" style="font-size:14px;margin-top:4px;">${money(group.total)}</div>
+      </div>
+      <button class="pill-btn" data-a="reorder" ${available?'':'disabled'}>${available?'Order again':'Unavailable'}</button>`;
+    if (available){
+      row.querySelector('[data-a="reorder"]').onclick = ()=>{
+        const quantity = Math.min(Number(latestOrder.qty)||1,Number(product.qty));
+        openCartQuantityPicker(product,quantity,null);
+      };
+    }
     list.appendChild(row);
   });
 }
 
 function renderCart(root){
   const cart = store.cart(currentUser);
+  renderCartDrawer();
   root.innerHTML = `<div class="section-head"><h3>${t('cart')}</h3></div><div class="card" id="cartList"></div>`;
   const list = document.getElementById('cartList');
-  if (!cart.length){ list.innerHTML = `<div class="empty-state"><div class="glyph">🛒</div>Your cart is empty.</div>`; return; }
+  if (!cart.length){
+    list.innerHTML = `<div class="empty-state"><div class="glyph">🛒</div>Your cart is empty.<br><button class="pill-btn" id="browseProduceBtn" type="button">Browse produce</button></div>`;
+    list.querySelector('#browseProduceBtn').onclick = ()=>goTo('nearby');
+    return;
+  }
   let total = 0;
   cart.forEach(c=>{
     total += c.price * c.qty;
@@ -1354,23 +1907,104 @@ function renderCart(root){
   });
   const bar = document.createElement('div'); bar.className='cart-total-bar';
   bar.innerHTML = `<div><div style="font-size:12.5px;opacity:.8;">Total</div><div style="font-family:'Fraunces',serif;font-size:22px;">${money(total)}</div></div>
-    <button class="btn-primary" id="checkoutBtn">Proceed to checkout</button>`;
+    <button class="btn-primary" id="cartPageCheckoutBtn">Proceed to checkout</button>`;
   root.appendChild(bar);
-  document.getElementById('checkoutBtn').onclick = openPaymentModal;
+  document.getElementById('cartPageCheckoutBtn').onclick = openPaymentModal;
 }
+function renderCartDrawer(){
+  const drawerList = document.getElementById('drawerItemsList');
+  if (!drawerList) return;
+  const cart = currentUser && currentRole==='consumer' ? store.cart(currentUser) : [];
+  const subtotal = cart.reduce((sum,item)=>sum + Number(item.price)*Number(item.qty),0);
+  document.getElementById('cartBadge').textContent = cart.reduce((sum,item)=>sum + Number(item.qty),0);
+  document.getElementById('cartSubtotal').textContent = money(subtotal);
+  document.getElementById('checkoutBtn').disabled = cart.length===0;
+  document.getElementById('clearCartBtn').disabled = cart.length===0;
+
+  if (!cart.length){
+    drawerList.innerHTML = `<div class="drawer-empty-state"><div class="glyph">🧺</div><p>Your basket is empty.</p><button class="pill-btn" id="drawerBrowseBtn" type="button">Browse produce</button></div>`;
+    drawerList.querySelector('#drawerBrowseBtn').onclick = ()=>{ closeCartDrawer(); goTo('nearby'); };
+    return;
+  }
+
+  drawerList.innerHTML = cart.map(item=>{
+    const farmerName = getUser(item.farmer)?.name || item.farmer;
+    return `<article class="cart-item-row" data-id="${item.id}">
+      <div class="cart-item-emoji" aria-hidden="true">${item.icon}</div>
+      <div class="cart-item-details">
+        <h4 class="cart-item-title">${item.name}</h4>
+        <p class="cart-item-farmer">${farmerName}</p>
+        <p class="cart-item-price">${money(item.price)} / ${item.unit}</p>
+      </div>
+      <div class="cart-item-actions">
+        <div class="cart-qty-control" aria-label="Quantity">
+          <button class="btn-qty" data-a="dec" type="button" aria-label="Decrease ${item.name} quantity">−</button>
+          <span class="qty-val">${item.qty}</span>
+          <button class="btn-qty" data-a="inc" type="button" aria-label="Increase ${item.name} quantity">+</button>
+        </div>
+        <strong class="cart-item-line-total">${money(item.price*item.qty)}</strong>
+        <button class="btn-remove-item" data-a="remove" type="button" aria-label="Remove ${item.name}" title="Remove item">Remove</button>
+      </div>
+    </article>`;
+  }).join('');
+
+  drawerList.querySelectorAll('.cart-item-row').forEach(row=>{
+    const id = row.dataset.id;
+    row.querySelector('[data-a="inc"]').onclick = ()=>changeCartQty(id,1);
+    row.querySelector('[data-a="dec"]').onclick = ()=>changeCartQty(id,-1);
+    row.querySelector('[data-a="remove"]').onclick = ()=>removeFromCart(id);
+  });
+}
+
+function refreshCartViews(){
+  renderCartDrawer();
+  if (currentRole==='consumer' && currentView==='cart') renderView('cart');
+  if (currentRole==='consumer' && currentView==='dashboard') renderView('dashboard');
+}
+
+function openCartDrawer(){
+  if (currentRole!=='consumer') return;
+  renderCartDrawer();
+  document.getElementById('cartDrawer').classList.add('open');
+  document.getElementById('cartOverlay').classList.add('open');
+  document.getElementById('cartDrawer').setAttribute('aria-hidden','false');
+  document.getElementById('cartOverlay').setAttribute('aria-hidden','false');
+  document.getElementById('cartBtn').setAttribute('aria-expanded','true');
+  document.body.classList.add('cart-drawer-open');
+  document.getElementById('closeCartBtn').focus();
+}
+
+function closeCartDrawer(){
+  const drawer = document.getElementById('cartDrawer');
+  const overlay = document.getElementById('cartOverlay');
+  if (!drawer || !overlay) return;
+  drawer.classList.remove('open');
+  overlay.classList.remove('open');
+  drawer.setAttribute('aria-hidden','true');
+  overlay.setAttribute('aria-hidden','true');
+  document.getElementById('cartBtn').setAttribute('aria-expanded','false');
+  document.body.classList.remove('cart-drawer-open');
+}
+
 function changeCartQty(id, delta){
   const cart = store.cart(currentUser);
   const item = cart.find(c=>c.id===id);
-  item.qty = Math.max(1, item.qty+delta);
+  if (!item) return;
+  item.qty += delta;
+  if (item.qty<=0){
+    store.saveCart(currentUser, cart.filter(c=>c.id!==id));
+    refreshCartViews();
+    return;
+  }
   store.saveCart(currentUser, cart);
-  renderView('cart');
+  refreshCartViews();
 }
 function removeFromCart(id){
   let cart = store.cart(currentUser);
   cart = cart.filter(c=>c.id!==id);
   store.saveCart(currentUser, cart);
   toast("Removed from cart");
-  renderView('cart');
+  refreshCartViews();
 }
 
 // ===============================
@@ -1379,7 +2013,23 @@ function removeFromCart(id){
 // demonstration purposes.
 // No real SMS/payment service is used.
 // ===============================
+function customerAddressIsComplete(){
+  const customer = getUser(currentUser);
+  return Boolean(customer?.city?.trim() && customer?.address?.trim());
+}
+
+function requireCustomerAddressForCheckout(){
+  resumeCheckoutAfterProfileSave = true;
+  closeCartDrawer();
+  goTo('profile');
+  toast('Add your city and home address to continue checkout.');
+}
+
 function openPaymentModal(){
+  if (!customerAddressIsComplete()){
+    requireCustomerAddressForCheckout();
+    return;
+  }
   // Generate the demo OTP ONCE per modal open — it must stay the
   // same for as long as this payment modal is on screen, so it's
   // captured here (not regenerated on every render/keystroke).
@@ -1420,7 +2070,7 @@ function openPaymentModal(){
   overlay.querySelector('#confirmPay').onclick = ()=>{
     if (!selectedMethod){ toast("⚠️ Select a payment method"); return; }
     if (overlay.querySelector('#payOtp').value.trim() !== otp){ toast("❌ Incorrect OTP"); return; }
-    completeCheckout();
+    if (!completeCheckout()) return;
     overlay.remove();
   };
 }
@@ -1428,25 +2078,32 @@ function openPaymentModal(){
 // each produce listing's stock, and empties the cart. Runs after the
 // demo payment OTP above is confirmed.
 function completeCheckout(){
+  if (!customerAddressIsComplete()){
+    requireCustomerAddressForCheckout();
+    return false;
+  }
   const cart = store.cart(currentUser);
-  if (!cart.length) return;
+  if (!cart.length) return false;
+  playCheckoutChime();
   const orders = store.orders();
   const u = getUser(currentUser);
   cart.forEach(c=>{
+    const produce = store.produce();
+    const product = produce.find(item=>(c.productId && item.id===c.productId) || (item.farmer===c.farmer && item.name===c.name));
     orders.push({id:'o'+Date.now()+Math.random().toString(36).slice(2,5), farmer:c.farmer, consumer:u.name,
-      item:c.name, qty:c.qty, unit:c.unit, price:c.price*c.qty, city:u.city||cityFromAddress(u.address)||'Chennai', address:u.address||'Address on file',
+      productId:c.productId || product?.id, item:c.name, qty:c.qty, unit:c.unit, price:c.price*c.qty, city:u.city.trim(), address:u.address.trim(),
       status:'pending', date:new Date().toISOString().slice(0,10),
       // DELIVERY TRACKING: every new order starts at "placed" and moves
       // forward through DELIVERY_STAGES as the farmer updates it.
       deliveryStage:'placed'});
-    const produce = store.produce();
-    const p = produce.find(x=>x.farmer===c.farmer && x.name===c.name);
-    if (p){ p.qty = Math.max(0, p.qty - c.qty); if (p.qty===0) p.sold = true; store.saveProduce(produce); }
+    if (product){ product.qty = Math.max(0, product.qty - c.qty); if (product.qty===0) product.sold = true; store.saveProduce(produce); }
   });
   store.saveOrders(orders);
   store.saveCart(currentUser, []);
-  toast("✅ Order placed! Track it under 'Items Ordered'.");
-  goTo('itemsOrdered');
+  renderCartDrawer();
+  toast("✅ Order placed! Track it on your dashboard.");
+  goTo('dashboard');
+  return true;
 }
 
 // Shows every rupee this consumer has spent: product orders AND donations,
@@ -1465,22 +2122,38 @@ function renderConsumerMoneyTable(root){
 }
 
 function renderNearby(root){
-  const farmers = Object.entries(store.users()).filter(([k,v])=>v.type==='farmer');
-  root.innerHTML = `<div class="section-head"><h3>${t('nearby')}</h3><span class="muted">Within 10km radius</span></div><div id="nearbyList"></div>`;
+  const consumer = getUser(currentUser);
+  const customerCity = consumer.city || cityFromAddress(consumer.address);
+  const customerCoordinates = coordinatesForCity(customerCity);
+  const farmers = Object.entries(store.users())
+    .filter(([,user])=>user.type==='farmer')
+    .map(([username,farmer])=>{
+      const farmerCity = cityFromAddress(farmer.village);
+      return {username,farmer,farmerCity,distance:distanceBetweenCitiesKm(customerCity,farmerCity)};
+    })
+    .sort((a,b)=>{
+      if (a.distance===null) return b.distance===null ? 0 : 1;
+      if (b.distance===null) return -1;
+      return a.distance-b.distance;
+    });
+  const distanceContext = customerCoordinates
+    ? `Distances from ${customerCity} city centre`
+    : 'Set a supported city in your profile to calculate distances';
+  root.innerHTML = `<div class="section-head"><h3>${t('nearby')}</h3><span class="muted">${distanceContext}</span></div><div id="nearbyList"></div>`;
   const list = document.getElementById('nearbyList');
-  const dists = [2.3,4.8,6.1,8.5];
-  farmers.forEach(([uname,f],i)=>{
-    const produce = store.produce().filter(p=>p.farmer===uname && !p.sold);
+  farmers.forEach(({username,farmer,distance})=>{
+    const produce = store.produce().filter(p=>p.farmer===username && !p.sold);
+    const distanceLabel = distance===null ? 'Distance unavailable' : `${Math.round(distance)} km away`;
     const div = document.createElement('div'); div.className='nearby-card';
-    div.innerHTML = `<div class="avatar">${f.name.split(' ').map(x=>x[0]).join('').slice(0,2)}</div>
+    div.innerHTML = `<div class="avatar">${farmer.name.split(' ').map(x=>x[0]).join('').slice(0,2)}</div>
       <div style="flex:1;">
-        <div class="order-item-name">${f.name} <span class="dist-badge">${dists[i%dists.length]} km</span></div>
-        <div class="order-sub">${f.village||''} · ${produce.map(p=>p.icon+' '+p.name).join('  ')}</div>
+        <div class="order-item-name">${farmer.name} <span class="dist-badge" title="Straight-line distance between city centres">${distanceLabel}</span></div>
+        <div class="order-sub">${farmer.village||''} · ${produce.map(p=>p.icon+' '+p.name).join('  ')}</div>
       </div>
       <button class="pill-btn" data-a="produce">View produce</button>
       <button class="pill-btn" data-a="profile">View Profile</button>`;
-    div.querySelector('[data-a="produce"]').onclick = ()=> showFarmerProduce(uname);
-    div.querySelector('[data-a="profile"]').onclick = ()=> openFarmerProfile(uname,'nearby');
+    div.querySelector('[data-a="produce"]').onclick = ()=> showFarmerProduce(username);
+    div.querySelector('[data-a="profile"]').onclick = ()=> openFarmerProfile(username,'nearby');
     list.appendChild(div);
   });
   const holder = document.createElement('div'); holder.id='nearbyProduceHolder'; holder.style.marginTop='20px';
@@ -1495,7 +2168,7 @@ function showFarmerProduce(uname){
   produce.forEach(p=>{
     const el = produceCardEl(p,false);
     const btn = document.createElement('button'); btn.className='pill-btn'; btn.style.margin='10px 14px 14px'; btn.textContent='Add to cart';
-    btn.onclick = ()=> addToCart(p,1);
+    btn.onclick = ()=> openCartQuantityPicker(p,1,el.querySelector('.produce-img'));
     el.appendChild(btn);
     grid.appendChild(el);
   });
@@ -1522,7 +2195,6 @@ function renderConsumerProfile(root){
         <div class="settings-row-label">📍 City name</div>
         <input id="consumerCity" type="text" value="${u.city||''}" placeholder="e.g. Chennai">
         <div class="settings-row-label" style="margin-top:14px;">🏠 Home address</div>
-        <div class="order-sub">The city is used to calculate the tracking route.</div>
         <textarea id="consumerAddress" rows="3" placeholder="Enter your full home address">${u.address||''}</textarea>
         <button class="btn-primary" id="saveConsumerProfile" style="margin-top:12px;">Save address</button>
       </div>
@@ -1536,7 +2208,11 @@ function renderConsumerProfile(root){
     users[currentUser].city = city;
     users[currentUser].address = address;
     store.saveUsers(users);
-    toast("✅ Home address updated");
+    toast("✅ City and home address saved");
+    if (resumeCheckoutAfterProfileSave){
+      resumeCheckoutAfterProfileSave = false;
+      openPaymentModal();
+    }
   };
 }
 
@@ -1605,7 +2281,7 @@ function renderSearch(root){
       const row = document.createElement('div'); row.style.display='flex'; row.style.gap='8px'; row.style.padding='0 14px 14px';
       const qtyInput = document.createElement('input'); qtyInput.type='number'; qtyInput.value=1; qtyInput.min=1; qtyInput.style.width='60px'; qtyInput.style.padding='8px'; qtyInput.style.borderRadius='6px'; qtyInput.style.border='1px solid var(--line)';
       const btn = document.createElement('button'); btn.className='pill-btn'; btn.textContent='Add to cart'; btn.style.flex='1';
-      btn.onclick = ()=> addToCart(p, Number(qtyInput.value)||1);
+      btn.onclick = ()=> openCartQuantityPicker(p,Number(qtyInput.value)||1,el.querySelector('.produce-img'));
       row.appendChild(qtyInput); row.appendChild(btn);
       el.appendChild(row);
       grid.appendChild(el);
@@ -1672,7 +2348,7 @@ function renderFarmerPublicProfile(root){
   produce.forEach(p=>{
     const el = produceCardEl(p,false);
     const btn = document.createElement('button'); btn.className='pill-btn'; btn.style.margin='10px 14px 14px'; btn.textContent='Add to cart';
-    btn.onclick = ()=> addToCart(p,1);
+    btn.onclick = ()=> openCartQuantityPicker(p,1,el.querySelector('.produce-img'));
     el.appendChild(btn);
     grid.appendChild(el);
   });

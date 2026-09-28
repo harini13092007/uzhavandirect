@@ -225,6 +225,9 @@ let currentUser = localStorage.getItem('ud_currentUser') || null; // username
 let currentRole = null; // 'farmer' | 'consumer'
 let selectedRole = 'farmer'; // role toggle on auth screen
 let pendingOtp = null;
+let pendingCartProduct = null;
+let currentPickerQty = 1;
+let audioCtx = null;
 
 function getUser(username){ return store.users()[username]; }
 
@@ -477,6 +480,43 @@ document.getElementById('menuToggle').onclick = ()=>{
   document.querySelector('.sidebar').classList.toggle('open');
 };
 
+document.getElementById('cartBtn').onclick = openCartDrawer;
+document.getElementById('closeCartBtn').onclick = closeCartDrawer;
+document.getElementById('cartOverlay').onclick = closeCartDrawer;
+document.getElementById('clearCartBtn').onclick = ()=>{
+  if (!currentUser || currentRole!=='consumer') return;
+  store.saveCart(currentUser, []);
+  refreshCartViews();
+  toast('Basket cleared');
+};
+document.getElementById('checkoutBtn').onclick = ()=>{
+  if (!currentUser || !store.cart(currentUser).length) return;
+  closeCartDrawer();
+  openPaymentModal();
+};
+document.getElementById('btnQtyMinus').onclick = ()=>{
+  if (currentPickerQty > 1){ currentPickerQty--; updateQtyModalDisplay(); }
+};
+document.getElementById('btnQtyPlus').onclick = ()=>{
+  const maxQty = Number(pendingCartProduct?.qty) || 9999;
+  if (currentPickerQty < maxQty){ currentPickerQty++; updateQtyModalDisplay(); }
+};
+document.getElementById('closeQtyModal').onclick = closeQtyModal;
+document.getElementById('qtyModalOverlay').addEventListener('click', e=>{
+  if (e.target.id==='qtyModalOverlay') closeQtyModal();
+});
+document.getElementById('confirmQtyBtn').onclick = ()=>{
+  if (!pendingCartProduct || !currentUser || currentRole!=='consumer') return;
+  const {sourceElem, ...product} = pendingCartProduct;
+  const quantity = currentPickerQty;
+  closeQtyModal();
+  animateFlyToCart(sourceElem, ()=>addToCart(product, quantity));
+};
+document.addEventListener('keydown', e=>{
+  if (e.key==='Escape' && !document.getElementById('qtyModalOverlay').classList.contains('hidden')) closeQtyModal();
+  if (e.key==='Escape' && document.getElementById('cartDrawer').classList.contains('open')) closeCartDrawer();
+});
+
 // Toggle the notifications dropdown open/closed.
 document.getElementById('notifBell').onclick = ()=>{
   const panel = document.getElementById('notifPanel');
@@ -544,10 +584,13 @@ function money(n){ return '₹' + Number(n).toLocaleString('en-IN'); }
 
 /* ---------- Boot / routing ---------- */
 function boot(){
+  closeCartDrawer();
   if (currentUser){
     currentRole = getUser(currentUser).type;
     authScreen.classList.add('hidden');
     appShell.classList.remove('hidden');
+    document.getElementById('cartBtn').classList.toggle('hidden', currentRole!=='consumer');
+    renderCartDrawer();
     document.getElementById('userChipName').textContent = getUser(currentUser).name;
     currentView = 'dashboard';
     renderNav();
@@ -1380,38 +1423,165 @@ function renderFarmerSettings(root){
  * ======================================================================= */
 function renderConsumerDashboard(root){
   const orders = store.orders().filter(o=>o.consumer===getUser(currentUser).name);
-  const cart = store.cart(currentUser);
   // Money Spent = product purchases + any donations this consumer has made.
   const spent = orders.reduce((s,o)=>s+o.price,0) + consumerDonationsTotal(currentUser);
   root.innerHTML = `
     <div class="stat-strip">
       <div class="stat-cell" id="cellItems"><span class="stat-num">${orders.length}</span><span class="stat-label">${t('itemsOrdered')}</span></div>
-      <div class="stat-cell" id="cellCart"><span class="stat-num">${cart.length}</span><span class="stat-label">${t('cart')}</span></div>
       <div class="stat-cell" id="cellSpent"><span class="stat-num">${money(spent)}</span><span class="stat-label">${t('moneySpent')}</span></div>
     </div>
     <div class="section-head"><h3>Fresh from nearby farmers</h3><span class="muted">Within 10km</span></div>
     <div class="produce-grid" id="featured"></div>
   `;
   document.getElementById('cellItems').onclick = ()=> goTo('itemsOrdered');
-  document.getElementById('cellCart').onclick = ()=> goTo('cart');
   document.getElementById('cellSpent').onclick = ()=> goTo('moneyTable');
   const grid = document.getElementById('featured');
   store.produce().filter(p=>!p.sold).slice(0,4).forEach(p=>{
     const el = produceCardEl(p,false);
     const btn = document.createElement('button'); btn.className='pill-btn'; btn.style.margin='10px 14px 14px'; btn.textContent='Add to cart';
-    btn.onclick = ()=> addToCart(p,1);
+    btn.onclick = ()=> openQtyModal(p, el.querySelector('.produce-img'));
     el.appendChild(btn);
     grid.appendChild(el);
   });
 }
 
 function addToCart(p, qty){
+  qty = Math.max(1, Math.floor(Number(qty) || 1));
   const cart = store.cart(currentUser);
   const existing = cart.find(c=>c.name===p.name && c.farmer===p.farmer);
   if (existing) existing.qty += qty;
   else cart.push({id:'c'+Date.now(), name:p.name, icon:p.icon, qty, unit:p.unit, price:p.price, farmer:p.farmer});
   store.saveCart(currentUser, cart);
+  renderCartDrawer();
+  playCartPopSound();
   toast(`🛒 Added ${p.name} to cart`);
+}
+
+function openQtyModal(product, sourceElem){
+  if (!product || currentRole!=='consumer') return;
+  pendingCartProduct = {...product, sourceElem};
+  currentPickerQty = 1;
+  document.getElementById('qtyModalEmoji').textContent = product.icon || '🌿';
+  document.getElementById('qtyModalTitle').textContent = product.name;
+  document.getElementById('qtyModalSubtitle').textContent = `${money(product.price)} / ${product.unit}`;
+  document.getElementById('qtyPickerUnit').textContent = product.unit;
+  updateQtyModalDisplay();
+  document.getElementById('qtyModalOverlay').classList.remove('hidden');
+  document.getElementById('qtyModalOverlay').setAttribute('aria-hidden','false');
+  document.getElementById('btnQtyMinus').focus();
+}
+
+function closeQtyModal(){
+  const overlay = document.getElementById('qtyModalOverlay');
+  overlay.classList.add('hidden');
+  overlay.setAttribute('aria-hidden','true');
+  pendingCartProduct = null;
+}
+
+function updateQtyModalDisplay(){
+  const available = Number(pendingCartProduct?.qty) || 9999;
+  document.getElementById('qtyPickerVal').textContent = currentPickerQty;
+  document.getElementById('qtyTotalPrice').textContent = money((pendingCartProduct?.price || 0)*currentPickerQty);
+  document.getElementById('btnQtyMinus').disabled = currentPickerQty <= 1;
+  document.getElementById('btnQtyPlus').disabled = currentPickerQty >= available;
+}
+
+function getAudioContext(){
+  if (!audioCtx){
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return null;
+    audioCtx = new AudioContextClass();
+  }
+  if (audioCtx.state==='suspended') audioCtx.resume();
+  return audioCtx;
+}
+
+function playCartPopSound(){
+  try{
+    const context = getAudioContext();
+    if (!context) return;
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(400, context.currentTime);
+    oscillator.frequency.exponentialRampToValueAtTime(880, context.currentTime+.08);
+    gain.gain.setValueAtTime(.12, context.currentTime);
+    gain.gain.exponentialRampToValueAtTime(.001, context.currentTime+.08);
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.start();
+    oscillator.stop(context.currentTime+.08);
+  } catch (error) { }
+}
+
+function playCheckoutChime(){
+  try{
+    const context = getAudioContext();
+    if (!context) return;
+    [[523.25,0,.15],[659.25,.12,.25]].forEach(([frequency, delay, duration])=>{
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      const start = context.currentTime + delay;
+      oscillator.type = 'triangle';
+      oscillator.frequency.setValueAtTime(frequency, start);
+      gain.gain.setValueAtTime(.12, start);
+      gain.gain.exponentialRampToValueAtTime(.001, start+duration);
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+      oscillator.start(start);
+      oscillator.stop(start+duration);
+    });
+  } catch (error) { }
+}
+
+function animateFlyToCart(sourceElem, onComplete){
+  const cartButton = document.getElementById('cartBtn');
+  const cartIcon = cartButton?.querySelector('.cart-icon') || cartButton;
+  let completed = false;
+  let landingStarted = false;
+  let flyer = null;
+  const finish = ()=>{
+    if (completed) return;
+    completed = true;
+    if (flyer) flyer.remove();
+    cartButton.classList.remove('catching');
+    if (onComplete) onComplete();
+  };
+  if (!sourceElem || !cartButton || !cartIcon || cartButton.classList.contains('hidden')){
+    if (onComplete) onComplete();
+    return;
+  }
+  const sourceRect = sourceElem.getBoundingClientRect();
+  const targetRect = cartIcon.getBoundingClientRect();
+  flyer = document.createElement('div');
+  flyer.className = 'flying-item';
+  flyer.textContent = sourceElem.textContent.trim();
+  flyer.style.left = `${sourceRect.left + sourceRect.width/2}px`;
+  flyer.style.top = `${sourceRect.top + sourceRect.height/2}px`;
+  document.body.appendChild(flyer);
+  const flyerRect = flyer.getBoundingClientRect();
+  flyer.style.left = `${sourceRect.left + sourceRect.width/2 - flyerRect.width/2}px`;
+  flyer.style.top = `${sourceRect.top + sourceRect.height/2 - flyerRect.height/2}px`;
+  void flyer.offsetWidth;
+  flyer.style.left = `${targetRect.left + targetRect.width/2 - flyerRect.width/2}px`;
+  flyer.style.top = `${targetRect.top + targetRect.height/2 - flyerRect.height/2}px`;
+  flyer.classList.add('medium-shrink');
+  window.setTimeout(()=>{
+    cartButton.classList.remove('catching');
+    void cartButton.offsetWidth;
+    cartButton.classList.add('catching');
+  },520);
+  const beginLanding = ()=>{
+    if (completed || landingStarted) return;
+    landingStarted = true;
+    flyer.classList.add('caught');
+    window.setTimeout(finish,180);
+  };
+  flyer.addEventListener('transitionend', event=>{
+    if (event.target===flyer) beginLanding();
+  });
+  window.setTimeout(beginLanding,760);
+  window.setTimeout(finish,1100);
 }
 
 function renderItemsOrdered(root){
@@ -1443,9 +1613,14 @@ function renderItemsOrdered(root){
 
 function renderCart(root){
   const cart = store.cart(currentUser);
+  renderCartDrawer();
   root.innerHTML = `<div class="section-head"><h3>${t('cart')}</h3></div><div class="card" id="cartList"></div>`;
   const list = document.getElementById('cartList');
-  if (!cart.length){ list.innerHTML = `<div class="empty-state"><div class="glyph">🛒</div>Your cart is empty.</div>`; return; }
+  if (!cart.length){
+    list.innerHTML = `<div class="empty-state"><div class="glyph">🛒</div>Your cart is empty.<br><button class="pill-btn" id="browseProduceBtn" type="button">Browse produce</button></div>`;
+    list.querySelector('#browseProduceBtn').onclick = ()=>goTo('nearby');
+    return;
+  }
   let total = 0;
   cart.forEach(c=>{
     total += c.price * c.qty;
@@ -1467,23 +1642,104 @@ function renderCart(root){
   });
   const bar = document.createElement('div'); bar.className='cart-total-bar';
   bar.innerHTML = `<div><div style="font-size:12.5px;opacity:.8;">Total</div><div style="font-family:'Fraunces',serif;font-size:22px;">${money(total)}</div></div>
-    <button class="btn-primary" id="checkoutBtn">Proceed to checkout</button>`;
+    <button class="btn-primary" id="cartPageCheckoutBtn">Proceed to checkout</button>`;
   root.appendChild(bar);
-  document.getElementById('checkoutBtn').onclick = openPaymentModal;
+  document.getElementById('cartPageCheckoutBtn').onclick = openPaymentModal;
 }
+function renderCartDrawer(){
+  const drawerList = document.getElementById('drawerItemsList');
+  if (!drawerList) return;
+  const cart = currentUser && currentRole==='consumer' ? store.cart(currentUser) : [];
+  const subtotal = cart.reduce((sum,item)=>sum + Number(item.price)*Number(item.qty),0);
+  document.getElementById('cartBadge').textContent = cart.reduce((sum,item)=>sum + Number(item.qty),0);
+  document.getElementById('cartSubtotal').textContent = money(subtotal);
+  document.getElementById('checkoutBtn').disabled = cart.length===0;
+  document.getElementById('clearCartBtn').disabled = cart.length===0;
+
+  if (!cart.length){
+    drawerList.innerHTML = `<div class="drawer-empty-state"><div class="glyph">🧺</div><p>Your basket is empty.</p><button class="pill-btn" id="drawerBrowseBtn" type="button">Browse produce</button></div>`;
+    drawerList.querySelector('#drawerBrowseBtn').onclick = ()=>{ closeCartDrawer(); goTo('nearby'); };
+    return;
+  }
+
+  drawerList.innerHTML = cart.map(item=>{
+    const farmerName = getUser(item.farmer)?.name || item.farmer;
+    return `<article class="cart-item-row" data-id="${item.id}">
+      <div class="cart-item-emoji" aria-hidden="true">${item.icon}</div>
+      <div class="cart-item-details">
+        <h4 class="cart-item-title">${item.name}</h4>
+        <p class="cart-item-farmer">${farmerName}</p>
+        <p class="cart-item-price">${money(item.price)} / ${item.unit}</p>
+      </div>
+      <div class="cart-item-actions">
+        <div class="cart-qty-control" aria-label="Quantity">
+          <button class="btn-qty" data-a="dec" type="button" aria-label="Decrease ${item.name} quantity">−</button>
+          <span class="qty-val">${item.qty}</span>
+          <button class="btn-qty" data-a="inc" type="button" aria-label="Increase ${item.name} quantity">+</button>
+        </div>
+        <strong class="cart-item-line-total">${money(item.price*item.qty)}</strong>
+        <button class="btn-remove-item" data-a="remove" type="button" aria-label="Remove ${item.name}" title="Remove item">Remove</button>
+      </div>
+    </article>`;
+  }).join('');
+
+  drawerList.querySelectorAll('.cart-item-row').forEach(row=>{
+    const id = row.dataset.id;
+    row.querySelector('[data-a="inc"]').onclick = ()=>changeCartQty(id,1);
+    row.querySelector('[data-a="dec"]').onclick = ()=>changeCartQty(id,-1);
+    row.querySelector('[data-a="remove"]').onclick = ()=>removeFromCart(id);
+  });
+}
+
+function refreshCartViews(){
+  renderCartDrawer();
+  if (currentRole==='consumer' && currentView==='cart') renderView('cart');
+  if (currentRole==='consumer' && currentView==='dashboard') renderView('dashboard');
+}
+
+function openCartDrawer(){
+  if (currentRole!=='consumer') return;
+  renderCartDrawer();
+  document.getElementById('cartDrawer').classList.add('open');
+  document.getElementById('cartOverlay').classList.add('open');
+  document.getElementById('cartDrawer').setAttribute('aria-hidden','false');
+  document.getElementById('cartOverlay').setAttribute('aria-hidden','false');
+  document.getElementById('cartBtn').setAttribute('aria-expanded','true');
+  document.body.classList.add('cart-drawer-open');
+  document.getElementById('closeCartBtn').focus();
+}
+
+function closeCartDrawer(){
+  const drawer = document.getElementById('cartDrawer');
+  const overlay = document.getElementById('cartOverlay');
+  if (!drawer || !overlay) return;
+  drawer.classList.remove('open');
+  overlay.classList.remove('open');
+  drawer.setAttribute('aria-hidden','true');
+  overlay.setAttribute('aria-hidden','true');
+  document.getElementById('cartBtn').setAttribute('aria-expanded','false');
+  document.body.classList.remove('cart-drawer-open');
+}
+
 function changeCartQty(id, delta){
   const cart = store.cart(currentUser);
   const item = cart.find(c=>c.id===id);
-  item.qty = Math.max(1, item.qty+delta);
+  if (!item) return;
+  item.qty += delta;
+  if (item.qty<=0){
+    store.saveCart(currentUser, cart.filter(c=>c.id!==id));
+    refreshCartViews();
+    return;
+  }
   store.saveCart(currentUser, cart);
-  renderView('cart');
+  refreshCartViews();
 }
 function removeFromCart(id){
   let cart = store.cart(currentUser);
   cart = cart.filter(c=>c.id!==id);
   store.saveCart(currentUser, cart);
   toast("Removed from cart");
-  renderView('cart');
+  refreshCartViews();
 }
 
 // ===============================
@@ -1558,6 +1814,8 @@ function completeCheckout(){
   });
   store.saveOrders(orders);
   store.saveCart(currentUser, []);
+  renderCartDrawer();
+  playCheckoutChime();
   toast("✅ Order placed! Track it under 'Items Ordered'.");
   goTo('itemsOrdered');
 }
@@ -1608,7 +1866,7 @@ function showFarmerProduce(uname){
   produce.forEach(p=>{
     const el = produceCardEl(p,false);
     const btn = document.createElement('button'); btn.className='pill-btn'; btn.style.margin='10px 14px 14px'; btn.textContent='Add to cart';
-    btn.onclick = ()=> addToCart(p,1);
+    btn.onclick = ()=> openQtyModal(p, el.querySelector('.produce-img'));
     el.appendChild(btn);
     grid.appendChild(el);
   });
@@ -1785,7 +2043,7 @@ function renderFarmerPublicProfile(root){
   produce.forEach(p=>{
     const el = produceCardEl(p,false);
     const btn = document.createElement('button'); btn.className='pill-btn'; btn.style.margin='10px 14px 14px'; btn.textContent='Add to cart';
-    btn.onclick = ()=> addToCart(p,1);
+    btn.onclick = ()=> openQtyModal(p, el.querySelector('.produce-img'));
     el.appendChild(btn);
     grid.appendChild(el);
   });
