@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Uzhavan Direct — Farm to Table, Direct</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -22,8 +22,8 @@
 <section id="authScreen" class="auth-screen">
   <div class="auth-hero">
     <div class="auth-hero-mark">🌾</div>
-    <h1 class="auth-hero-title">Uzhavan<br>Direct</h1>
-    <p class="auth-hero-sub">உழவன் நேரடி — Straight from the field to your door. No middlemen, fair prices, real farmers.</p>
+    <h1 class="auth-hero-title"><span id="brandFirst">Uzhavan</span><br><span id="brandSecond">Direct</span></h1>
+    <p class="auth-hero-sub" id="brandTagline">From the field to your home, with fair prices and no middlemen.</p>
     <div class="auth-hero-stats">
       <div><strong>0%</strong><span>Commission to middlemen</span></div>
       <div><strong>10km</strong><span>Local sourcing radius</span></div>
@@ -98,7 +98,7 @@
 
   <!-- NAVIGATION / SIDEBAR: links are filled in by renderNav() in app.js -->
   <aside class="sidebar">
-    <div class="brand">🌾 <span>Uzhavan Direct</span></div>
+    <button class="brand brand-home" id="brandHomeBtn" type="button" aria-label="Go to dashboard">🌾 <span id="brandName">Uzhavan Direct</span></button>
     <nav id="sideNav" class="side-nav"></nav>
     <div class="sidebar-footer">
       <button id="logoutBtn" class="logout-btn">⎋ Log out</button>
@@ -129,6 +129,7 @@
           <div id="notifPanel" class="notif-panel hidden"></div>
         </div>
 
+        <button id="settingsShortcutBtn" class="theme-settings-btn" type="button" title="Settings" aria-label="Open profile settings"><span class="settings-gear" aria-hidden="true">⚙</span></button>
         <button class="user-chip" id="userChip" type="button" aria-label="Open profile and settings">👤 <span id="userChipName">User</span></button>
       </div>
     </header>

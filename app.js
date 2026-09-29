@@ -11,27 +11,113 @@
    back to English.
    =============================== */
 const I18N = {
-  en:{dashboard:"Dashboard",sellItem:"Sell Item",bidding:"Online Bidding",demand:"Demand Tracker",
-      aiChat:"Farmer's AI Chat",settings:"Settings",itemsOrdered:"Items Ordered",cart:"Cart",
-      history:"History",farmerProfile:"Farmer Profile",following:"Farmers You Follow",moneyDetails:"Money Details",
-      nearby:"Nearby You",search:"Search",logout:"Log out",ordersPending:"Orders pending",
-      ordersCompleted:"Orders completed",moneyReceived:"Total money received",moneySpent:"Money spent",
-      profile:"Profile", welcome:"Welcome back"},
-  ta:{dashboard:"டாஷ்போர்டு",sellItem:"பொருள் விற்பனை",bidding:"ஏலம்",demand:"தேவை கண்காணிப்பு",
-      aiChat:"விவசாயி AI அரட்டை",settings:"அமைப்புகள்",itemsOrdered:"ஆர்டர் செய்யப்பட்ட பொருட்கள்",cart:"கார்ட்",
-      history:"ஆர்டர் வரலாறு",farmerProfile:"விவசாயி சுயவிவரம்",following:"நீங்கள் பின்தொடரும் விவசாயிகள்",moneyDetails:"பண விவரங்கள்",
-      nearby:"அருகில் உள்ளவை",search:"தேடல்",logout:"வெளியேறு",ordersPending:"நிலுவையிலுள்ள ஆர்டர்கள்",
-      ordersCompleted:"முடிக்கப்பட்ட ஆர்டர்கள்",moneyReceived:"பெறப்பட்ட மொத்த பணம்",moneySpent:"செலவிடப்பட்ட பணம்",
-      profile:"சுயவிவரம்", welcome:"மீண்டும் வரவேற்கிறோம்"},
-  hi:{dashboard:"डैशबोर्ड",sellItem:"वस्तु बेचें",bidding:"ऑनलाइन बोली",demand:"मांग ट्रैकर",
-      aiChat:"किसान AI चैट",settings:"सेटिंग्स",itemsOrdered:"ऑर्डर किए गए आइटम",cart:"कार्ट",
-      history:"ऑर्डर इतिहास",farmerProfile:"किसान प्रोफ़ाइल",following:"आपके द्वारा फ़ॉलो किए गए किसान",moneyDetails:"पैसे का विवरण",
-      nearby:"आस-पास",search:"खोजें",logout:"लॉग आउट",ordersPending:"लंबित ऑर्डर",
-      ordersCompleted:"पूर्ण ऑर्डर",moneyReceived:"कुल प्राप्त राशि",moneySpent:"खर्च की गई राशि",
-      profile:"प्रोफ़ाइल", welcome:"वापसी पर स्वागत है"}
+    en:{dashboard:"Dashboard",sellItem:"Sell Produce",bidding:"Auctions",demand:"Market Demand",
+      aiChat:"Farm Advisor",settings:"Settings",itemsOrdered:"Purchased Items",cart:"Basket",
+      history:"Purchase History",farmerProfile:"Farmer Details",following:"Farmers You Follow",moneyDetails:"Money Details",
+      nearby:"Nearby Produce",search:"Search Produce",logout:"Log out",ordersPending:"Pending Sales",
+      ordersCompleted:"Completed Sales",moneyReceived:"Total Income",moneySpent:"Total Spent",
+      profile:"Profile",welcome:"Welcome back",brandFirst:"Uzhavan",brandSecond:"Direct",
+      brandName:"Uzhavan Direct",brandTagline:"From the field to your home, with fair prices and no middlemen.",
+      appearance:"Appearance",brightMode:"Bright",darkMode:"Dark",language:"Language",
+      colorTheme:"Color theme",choosePalette:"Choose a palette for the app.",home:"Go to dashboard"},
+    ta:{dashboard:"முகப்புப் பலகை",sellItem:"விளைபொருள் விற்பனை",bidding:"ஏலம்",demand:"சந்தைத் தேவை",
+      aiChat:"AI விவசாய ஆலோசகர்",settings:"விருப்பங்கள்",itemsOrdered:"வாங்கிய பொருட்கள்",cart:"கூடை",
+      history:"வாங்கிய பொருட்களின் வரலாறு",farmerProfile:"விவசாயி விவரம்",following:"நீங்கள் பின்தொடரும் விவசாயிகள்",moneyDetails:"வரவு செலவு விவரங்கள்",
+      nearby:"அருகிலுள்ள விளைபொருட்கள்",search:"விளைபொருள் தேடல்",logout:"வெளியேறு",ordersPending:"நிறைவேற்ற வேண்டிய விற்பனைகள்",
+      ordersCompleted:"நிறைவேற்றிய விற்பனைகள்",moneyReceived:"மொத்த வரவு",moneySpent:"மொத்த செலவு",
+      profile:"சுயவிவரம்",welcome:"மீண்டும் வரவேற்கிறோம்",brandFirst:"உழவர்",brandSecond:"சந்தை",
+      brandName:"உழவர் சந்தை",brandTagline:"வயலிலிருந்து உங்கள் இல்லத்திற்கு; இடைத்தரகர் இன்றி, உழவருக்கு நியாயமான விலை.",
+      appearance:"காட்சி அமைப்பு",brightMode:"ஒளிமுறை",darkMode:"இருள்முறை",language:"மொழி",
+      colorTheme:"வண்ணத் தோற்றம்",choosePalette:"பயன்பாட்டின் வண்ணங்களைத் தேர்ந்தெடுக்கவும்.",home:"முகப்புக்குச் செல்ல"},
+    hi:{dashboard:"मुख्य पटल",sellItem:"उपज बेचें",bidding:"नीलामी",demand:"बाज़ार की मांग",
+      aiChat:"खेती सलाहकार",settings:"प्राथमिकताएँ",itemsOrdered:"खरीदे गए सामान",cart:"टोकरी",
+      history:"खरीद का इतिहास",farmerProfile:"किसान परिचय",following:"आप जिन किसानों से जुड़े हैं",moneyDetails:"आय-व्यय विवरण",
+      nearby:"आस-पास की उपज",search:"उपज खोजें",logout:"बाहर जाएँ",ordersPending:"बाकी बिक्री",
+      ordersCompleted:"पूरी हुई बिक्री",moneyReceived:"कुल आमदनी",moneySpent:"कुल खर्च",
+      profile:"परिचय",welcome:"फिर से स्वागत है",brandFirst:"किसान",brandSecond:"मंडी",
+      brandName:"किसान मंडी",brandTagline:"खेत से आपके घर तक; बिना बिचौलियों के, किसान को उचित दाम।",
+      appearance:"दिखावट",brightMode:"उजला रूप",darkMode:"गहरा रूप",language:"भाषा",
+      colorTheme:"रंग रूप",choosePalette:"ऐप के लिए रंग चुनें।",home:"मुख्य पटल पर जाएँ"}
 };
 let lang = localStorage.getItem('ud_lang') || 'en';
 function t(key){ return (I18N[lang] && I18N[lang][key]) || I18N.en[key] || key; }
+
+let colorMode = localStorage.getItem('ud_color_mode')==='dark' ? 'dark' : 'light';
+document.documentElement.dataset.mode = colorMode;
+
+function updateLocalizedBrand(){
+  const copy = I18N[lang] || I18N.en;
+  document.documentElement.lang = lang;
+  document.title = copy.brandName;
+  document.getElementById('brandFirst').textContent = copy.brandFirst;
+  document.getElementById('brandSecond').textContent = copy.brandSecond;
+  document.getElementById('brandName').textContent = copy.brandName;
+  document.getElementById('brandTagline').textContent = copy.brandTagline;
+  document.getElementById('brandHomeBtn').setAttribute('aria-label',copy.home);
+}
+
+function colorModeSettingsMarkup(){
+  return `<div class="settings-row appearance-row">
+    <div class="settings-row-label">${t('appearance')}</div>
+    <div class="appearance-toggle" role="group" aria-label="${t('appearance')}">
+      <button class="appearance-option" type="button" data-color-mode="light" aria-pressed="${colorMode==='light'}">☀ ${t('brightMode')}</button>
+      <button class="appearance-option" type="button" data-color-mode="dark" aria-pressed="${colorMode==='dark'}">☾ ${t('darkMode')}</button>
+    </div>
+  </div>`;
+}
+
+function setColorMode(mode){
+  colorMode = mode==='dark' ? 'dark' : 'light';
+  document.documentElement.dataset.mode = colorMode;
+  localStorage.setItem('ud_color_mode',colorMode);
+  document.querySelectorAll('.appearance-option').forEach(button=>{
+    button.setAttribute('aria-pressed',String(button.dataset.colorMode===colorMode));
+  });
+}
+
+function bindColorModeButtons(){
+  document.querySelectorAll('.appearance-option').forEach(button=>{
+    button.onclick = ()=> setColorMode(button.dataset.colorMode);
+  });
+}
+
+const THEMES = [
+  {id:'theme2', name:'Theme 1', colors:['#0D3A35','#276152','#B1B7AB','#FBF6F0']},
+  {id:'theme3', name:'Theme 2', colors:['#F4F1EB','#7AA05A','#2D5A4A','#0D4C3C']},
+  {id:'theme4', name:'Theme 3', colors:['#D1F2EB','#50C878','#0B6E4F','#013220']},
+  {id:'theme5', name:'Theme 4', colors:['#E2F0CC','#8BC53D','#012F13','#011207']},
+  {id:'theme6', name:'Theme 5', colors:['#D6BD98','#677D6A','#40534C','#1A3636']}
+];
+
+function setTheme(themeId){
+  const selected = THEMES.find(theme=>theme.id===themeId) || THEMES.find(theme=>theme.id==='theme4');
+  document.documentElement.dataset.theme = selected.id;
+  localStorage.setItem('ud_theme', selected.id);
+  renderThemeMenu();
+}
+
+function renderThemeMenu(){
+  const panel = document.getElementById('themePanel');
+  if (!panel) return;
+  const activeTheme = document.documentElement.dataset.theme;
+  panel.innerHTML = `<div class="theme-panel-title">Choose a color theme</div>` + THEMES.map(theme=>`
+    <button class="theme-option${theme.id===activeTheme?' selected':''}" type="button" data-theme="${theme.id}" aria-pressed="${theme.id===activeTheme}">
+      <span>${theme.name}</span>
+      <span class="theme-swatches" aria-hidden="true">${theme.colors.map(color=>`<span style="background:${color}"></span>`).join('')}</span>
+    </button>`).join('');
+  panel.querySelectorAll('.theme-option').forEach(button=>{
+    button.onclick = ()=> setTheme(button.dataset.theme);
+  });
+}
+
+function setupThemePicker(){
+  const button = document.getElementById('settingsShortcutBtn');
+  const savedTheme = localStorage.getItem('ud_theme');
+  setTheme(THEMES.some(theme=>theme.id===savedTheme) ? savedTheme : 'theme4');
+  button.onclick = ()=>{
+    goTo('settings');
+  };
+}
 
 /* ===============================
    MARKETPLACE / PRODUCE LISTING
@@ -482,11 +568,17 @@ document.getElementById('langSelect').value = lang;
 document.getElementById('langSelect').onchange = e=>{
   lang = e.target.value;
   localStorage.setItem('ud_lang', lang);
+  updateLocalizedBrand();
   renderNav(); renderView(currentView);
 };
+setupThemePicker();
 
 document.getElementById('menuToggle').onclick = ()=>{
   document.querySelector('.sidebar').classList.toggle('open');
+};
+document.getElementById('brandHomeBtn').onclick = ()=>{
+  goTo('dashboard');
+  window.scrollTo({top:0,behavior:'smooth'});
 };
 document.getElementById('userChip').onclick = ()=> goTo('profile');
 
@@ -572,6 +664,7 @@ function money(n){ return '₹' + Number(n).toLocaleString('en-IN'); }
 
 /* ---------- Boot / routing ---------- */
 function boot(){
+  updateLocalizedBrand();
   closeCartDrawer();
   if (currentUser){
     currentRole = getUser(currentUser).type;
@@ -592,7 +685,7 @@ function boot(){
 
 // Titles for views that aren't in the sidebar nav (so they still get a
 // sensible topbar title instead of falling back to the raw view id).
-const EXTRA_VIEW_TITLES = {profile:'profile', farmerProfile:'farmerProfile', following:'following',
+const EXTRA_VIEW_TITLES = {profile:'profile', settings:'settings', farmerProfile:'farmerProfile', following:'following',
   pending:'ordersPending', completed:'ordersCompleted', moneyTable:'moneyDetails'};
 
 function renderView(viewId){
@@ -602,14 +695,14 @@ function renderView(viewId){
   root.innerHTML = '';
   if (currentRole==='farmer'){
     const map = {dashboard:renderFarmerDashboard, sell:renderSellItem, bidding:renderFarmerBidding,
-      demand:renderDemand, chat:renderChat, profile:renderFarmerProfile,
+      demand:renderDemand, chat:renderChat, profile:renderFarmerProfile, settings:renderFarmerSettings,
       pending:renderPendingOrders, completed:renderCompletedOrders, moneyTable:renderMoneyTable};
     (map[viewId]||renderFarmerDashboard)(root);
   } else {
     const map = {dashboard:renderConsumerDashboard, nearby:renderNearby, bidding:renderConsumerBidding,
       search:renderSearch, itemsOrdered:renderItemsOrdered,
       history:renderOrderHistory, cart:renderCart, moneyTable:renderConsumerMoneyTable, following:renderFollowing,
-      profile:renderConsumerProfile,
+      profile:renderConsumerProfile, settings:renderConsumerSettings,
       farmerProfile:renderFarmerPublicProfile};
     (map[viewId]||renderConsumerDashboard)(root);
   }
@@ -1591,17 +1684,20 @@ function renderFarmerProfile(root){
         </div>`).join('') : `<div class="empty-state"><div class="glyph">⭐</div>No ratings yet.</div>`}
     </div>
   `;
-  renderFarmerSettings(root);
 }
 
 function renderFarmerSettings(root){
   const u = getUser(currentUser);
-  root.insertAdjacentHTML('beforeend', `
-    <div class="section-head"><h3>${t('settings')}</h3></div>
+  root.innerHTML = `
+    <div class="section-head settings-anchor" id="accountSettings"><h3>${t('settings')}</h3></div>
     <div class="card">
+      ${colorModeSettingsMarkup()}
+      <div class="settings-row"><div><div class="settings-row-label">🎨 ${t('colorTheme')}</div>
+        <div class="settings-row-sub">${t('choosePalette')}</div></div></div>
+      <div id="themePanel" class="theme-picker-grid" role="group" aria-label="Color themes"></div>
       <div class="settings-row"><div><div class="settings-row-label">❓ Help &amp; how to use Uzhavan Direct</div>
         <div class="settings-row-sub">List produce from "Sell Item", start auctions from "Online Bidding", track pending/completed orders from your dashboard cards, and ask the AI chat for live rates.</div></div></div>
-      <div class="settings-row"><div class="settings-row-label">🌐 Language</div>
+      <div class="settings-row"><div class="settings-row-label">🌐 ${t('language')}</div>
         <select id="settingsLang" class="lang-select"><option value="en">English</option><option value="ta">தமிழ்</option><option value="hi">हिन्दी</option></select></div>
       <div class="settings-row"><div><div class="settings-row-label">👤 Edit profile</div></div></div>
       <div class="form-grid" style="margin-top:10px;">
@@ -1610,10 +1706,13 @@ function renderFarmerSettings(root){
       </div>
       <button class="btn-primary" id="saveProfileBtn" style="margin-top:12px;">Save changes</button>
     </div>
-  `);
+  `;
+  bindColorModeButtons();
+  renderThemeMenu();
   document.getElementById('settingsLang').value = lang;
   document.getElementById('settingsLang').onchange = e=>{
     lang = e.target.value; localStorage.setItem('ud_lang', lang);
+    updateLocalizedBrand();
     document.getElementById('langSelect').value = lang;
     renderNav(); renderView(currentView);
   };
@@ -2208,7 +2307,6 @@ function renderConsumerProfile(root){
       </div>
     </div>
   `;
-  renderConsumerSettings(root);
   document.getElementById('saveConsumerProfile').onclick = ()=>{
     const city = document.getElementById('consumerCity').value.trim();
     const address = document.getElementById('consumerAddress').value.trim();
@@ -2492,21 +2590,28 @@ function openDonateModal(uname){
 // the language switcher.
 // ===============================
 function renderConsumerSettings(root){
-  root.insertAdjacentHTML('beforeend', `
-    <div class="section-head"><h3>${t('settings')}</h3></div>
+  root.innerHTML = `
+    <div class="section-head settings-anchor" id="accountSettings"><h3>${t('settings')}</h3></div>
     <div class="card">
+      ${colorModeSettingsMarkup()}
+      <div class="settings-row"><div><div class="settings-row-label">🎨 ${t('colorTheme')}</div>
+        <div class="settings-row-sub">${t('choosePalette')}</div></div></div>
+      <div id="themePanel" class="theme-picker-grid" role="group" aria-label="Color themes"></div>
       <div class="settings-row"><div><div class="settings-row-label">❓ Help &amp; how to use Uzhavan Direct</div>
         <div class="settings-row-sub">Browse "Nearby You" for local farmers, "Search" to find specific produce, add to cart, then checkout with GPay/card/UPI/COD. Bid on bulk lots under "Online Bidding".</div></div></div>
       <div class="settings-row"><div class="settings-row-label">🧑‍🌾 Farmers you follow</div>
         <button class="pill-btn" id="goFollowing">View list</button></div>
-      <div class="settings-row"><div class="settings-row-label">🌐 Language</div>
+      <div class="settings-row"><div class="settings-row-label">🌐 ${t('language')}</div>
         <select id="settingsLang2" class="lang-select"><option value="en">English</option><option value="ta">தமிழ்</option><option value="hi">हिन्दी</option></select></div>
     </div>
-  `);
+  `;
+  bindColorModeButtons();
+  renderThemeMenu();
   document.getElementById('goFollowing').onclick = ()=> goTo('following');
   document.getElementById('settingsLang2').value = lang;
   document.getElementById('settingsLang2').onchange = e=>{
     lang = e.target.value; localStorage.setItem('ud_lang', lang);
+    updateLocalizedBrand();
     document.getElementById('langSelect').value = lang;
     renderNav(); renderView(currentView);
   };
