@@ -374,13 +374,6 @@ function markNotifRead(id){
   refreshNotifBadge();
   renderNotifPanel();
 }
-// On login, surface the newest unread notification as a toast so the
-// farmer sees it right away without having to open the bell panel.
-function maybeToastLatestNotif(){
-  const unread = (getUser(currentUser)?.notifications || []).filter(n=>!n.read);
-  if (unread.length) toast(`🔔 ${unread[unread.length-1].message}`);
-}
-
 /* ===============================
    AUTHENTICATION / LOGIN / SIGNUP
    Wires up the role switch (Farmer
@@ -591,7 +584,6 @@ function boot(){
     renderNav();
     renderView('dashboard');
     refreshNotifBadge();
-    maybeToastLatestNotif();
   } else {
     appShell.classList.add('hidden');
     authScreen.classList.remove('hidden');
