@@ -13,19 +13,19 @@
 const I18N = {
   en:{dashboard:"Dashboard",sellItem:"Sell Item",bidding:"Online Bidding",demand:"Demand Tracker",
       aiChat:"Farmer's AI Chat",settings:"Settings",itemsOrdered:"Items Ordered",cart:"Cart",
-      history:"History",
+      history:"History",farmerProfile:"Farmer Profile",following:"Farmers You Follow",moneyDetails:"Money Details",
       nearby:"Nearby You",search:"Search",logout:"Log out",ordersPending:"Orders pending",
       ordersCompleted:"Orders completed",moneyReceived:"Total money received",moneySpent:"Money spent",
       profile:"Profile", welcome:"Welcome back"},
   ta:{dashboard:"டாஷ்போர்டு",sellItem:"பொருள் விற்பனை",bidding:"ஏலம்",demand:"தேவை கண்காணிப்பு",
       aiChat:"விவசாயி AI அரட்டை",settings:"அமைப்புகள்",itemsOrdered:"ஆர்டர் செய்யப்பட்ட பொருட்கள்",cart:"கார்ட்",
-      history:"ஆர்டர் வரலாறு",
+      history:"ஆர்டர் வரலாறு",farmerProfile:"விவசாயி சுயவிவரம்",following:"நீங்கள் பின்தொடரும் விவசாயிகள்",moneyDetails:"பண விவரங்கள்",
       nearby:"அருகில் உள்ளவை",search:"தேடல்",logout:"வெளியேறு",ordersPending:"நிலுவையிலுள்ள ஆர்டர்கள்",
       ordersCompleted:"முடிக்கப்பட்ட ஆர்டர்கள்",moneyReceived:"பெறப்பட்ட மொத்த பணம்",moneySpent:"செலவிடப்பட்ட பணம்",
       profile:"சுயவிவரம்", welcome:"மீண்டும் வரவேற்கிறோம்"},
   hi:{dashboard:"डैशबोर्ड",sellItem:"वस्तु बेचें",bidding:"ऑनलाइन बोली",demand:"मांग ट्रैकर",
       aiChat:"किसान AI चैट",settings:"सेटिंग्स",itemsOrdered:"ऑर्डर किए गए आइटम",cart:"कार्ट",
-      history:"ऑर्डर इतिहास",
+      history:"ऑर्डर इतिहास",farmerProfile:"किसान प्रोफ़ाइल",following:"आपके द्वारा फ़ॉलो किए गए किसान",moneyDetails:"पैसे का विवरण",
       nearby:"आस-पास",search:"खोजें",logout:"लॉग आउट",ordersPending:"लंबित ऑर्डर",
       ordersCompleted:"पूर्ण ऑर्डर",moneyReceived:"कुल प्राप्त राशि",moneySpent:"खर्च की गई राशि",
       profile:"प्रोफ़ाइल", welcome:"वापसी पर स्वागत है"}
@@ -81,11 +81,11 @@ function seed(){
 
   const users = {
     // notifications:[] holds alerts for this user, e.g. "you got a donation"
-    karthik_farms:{type:"farmer",name:"Karthik Raman",phone:"9876543210",password:"pass123",
+    karthik_farms:{type:"farmer",name:"Karthik Raman",phone:"9876543210",password:"123",
       village:"Salem, TN",bio:"Third-generation paddy & vegetable farmer.",followers:["divya_buys"],donations:[],notifications:[]},
     meena_agro:{type:"farmer",name:"Meena Devi",phone:"9123456780",password:"pass123",
       village:"Erode, TN",bio:"Organic dairy & millet farm.",followers:[],donations:[],notifications:[]},
-    divya_buys:{type:"consumer",name:"Divya Sundar",phone:"9988776655",password:"pass123",
+    divya_buys:{type:"consumer",name:"Divya Sundar",phone:"9988776655",password:"123",
         following:["karthik_farms"],city:"Chennai",address:"14 Anna Nagar, Chennai, Tamil Nadu"}
   };
 
@@ -193,6 +193,18 @@ const store = {
   saveRatings(r){ this.set('ud_ratings', r); }
 };
 ensureConsumerProfileFields();
+
+function ensureDemoCredentials(){
+  if (localStorage.getItem('ud_demo_credentials_v2')) return;
+  const users = store.users() || {};
+  [['karthik_farms','farmer'],['divya_buys','consumer']].forEach(([username,type])=>{
+    const user = users[username];
+    if (user?.type===type && user.password==='pass123') user.password = '123';
+  });
+  store.saveUsers(users);
+  localStorage.setItem('ud_demo_credentials_v2','1');
+}
+ensureDemoCredentials();
 
 /* ---------- Toast ---------- */
 function toast(msg){
@@ -380,6 +392,7 @@ function maybeToastLatestNotif(){
    =============================== */
 const authScreen = document.getElementById('authScreen');
 const appShell = document.getElementById('appShell');
+const DEMO_LOGIN_USERS = {farmer:'karthik_farms',consumer:'divya_buys'};
 
 document.getElementById('roleFarmerBtn').onclick = ()=> setAuthRole('farmer');
 document.getElementById('roleConsumerBtn').onclick = ()=> setAuthRole('consumer');
@@ -409,6 +422,10 @@ document.getElementById('loginForm').addEventListener('submit', e=>{
   for (const uname in users){
     const u = users[uname];
     if ((uname===id || u.phone===id) && u.password===pass){ found = uname; break; }
+  }
+  if (!found && id.toLowerCase()==='john'){
+    const demoUsername = DEMO_LOGIN_USERS[selectedRole];
+    if (users[demoUsername]?.password===pass) found = demoUsername;
   }
   if (!found){ toast("❌ No matching account. Check username/phone & password."); return; }
   if (users[found].type !== selectedRole){
@@ -478,6 +495,7 @@ document.getElementById('langSelect').onchange = e=>{
 document.getElementById('menuToggle').onclick = ()=>{
   document.querySelector('.sidebar').classList.toggle('open');
 };
+document.getElementById('userChip').onclick = ()=> goTo('profile');
 
 document.getElementById('cartBtn').onclick = openCartDrawer;
 document.getElementById('closeCartBtn').onclick = closeCartDrawer;
@@ -521,18 +539,14 @@ const FARMER_NAV = [
   {id:'sell', icon:'🌱', key:'sellItem'},
   {id:'bidding', icon:'⚖️', key:'bidding'},
   {id:'demand', icon:'📈', key:'demand'},
-  {id:'chat', icon:'💬', key:'aiChat'},
-  {id:'profile', icon:'👤', key:'profile'},
-  {id:'settings', icon:'⚙️', key:'settings'}
+  {id:'chat', icon:'💬', key:'aiChat'}
 ];
 const CONSUMER_NAV = [
   {id:'dashboard', icon:'📊', key:'dashboard'},
   {id:'nearby', icon:'📍', key:'nearby'},
   {id:'bidding', icon:'⚖️', key:'bidding'},
   {id:'search', icon:'🔍', key:'search'},
-  {id:'history', icon:'🕘', key:'history'},
-  {id:'profile', icon:'👤', key:'profile'},
-  {id:'settings', icon:'⚙️', key:'settings'}
+  {id:'history', icon:'🕘', key:'history'}
 ];
 
 let currentView = 'dashboard';
@@ -586,7 +600,8 @@ function boot(){
 
 // Titles for views that aren't in the sidebar nav (so they still get a
 // sensible topbar title instead of falling back to the raw view id).
-const EXTRA_VIEW_TITLES = {farmerProfile:'Farmer Profile'};
+const EXTRA_VIEW_TITLES = {profile:'profile', farmerProfile:'farmerProfile', following:'following',
+  pending:'ordersPending', completed:'ordersCompleted', moneyTable:'moneyDetails'};
 
 function renderView(viewId){
   document.getElementById('viewTitle').textContent =
@@ -595,12 +610,12 @@ function renderView(viewId){
   root.innerHTML = '';
   if (currentRole==='farmer'){
     const map = {dashboard:renderFarmerDashboard, sell:renderSellItem, bidding:renderFarmerBidding,
-      demand:renderDemand, chat:renderChat, profile:renderFarmerProfile, settings:renderFarmerSettings,
+      demand:renderDemand, chat:renderChat, profile:renderFarmerProfile,
       pending:renderPendingOrders, completed:renderCompletedOrders, moneyTable:renderMoneyTable};
     (map[viewId]||renderFarmerDashboard)(root);
   } else {
     const map = {dashboard:renderConsumerDashboard, nearby:renderNearby, bidding:renderConsumerBidding,
-      search:renderSearch, settings:renderConsumerSettings, itemsOrdered:renderItemsOrdered,
+      search:renderSearch, itemsOrdered:renderItemsOrdered,
       history:renderOrderHistory, cart:renderCart, moneyTable:renderConsumerMoneyTable, following:renderFollowing,
       profile:renderConsumerProfile,
       farmerProfile:renderFarmerPublicProfile};
@@ -1584,11 +1599,12 @@ function renderFarmerProfile(root){
         </div>`).join('') : `<div class="empty-state"><div class="glyph">⭐</div>No ratings yet.</div>`}
     </div>
   `;
+  renderFarmerSettings(root);
 }
 
 function renderFarmerSettings(root){
   const u = getUser(currentUser);
-  root.innerHTML = `
+  root.insertAdjacentHTML('beforeend', `
     <div class="section-head"><h3>${t('settings')}</h3></div>
     <div class="card">
       <div class="settings-row"><div><div class="settings-row-label">❓ Help &amp; how to use Uzhavan Direct</div>
@@ -1602,7 +1618,7 @@ function renderFarmerSettings(root){
       </div>
       <button class="btn-primary" id="saveProfileBtn" style="margin-top:12px;">Save changes</button>
     </div>
-  `;
+  `);
   document.getElementById('settingsLang').value = lang;
   document.getElementById('settingsLang').onchange = e=>{
     lang = e.target.value; localStorage.setItem('ud_lang', lang);
@@ -2200,6 +2216,7 @@ function renderConsumerProfile(root){
       </div>
     </div>
   `;
+  renderConsumerSettings(root);
   document.getElementById('saveConsumerProfile').onclick = ()=>{
     const city = document.getElementById('consumerCity').value.trim();
     const address = document.getElementById('consumerAddress').value.trim();
@@ -2483,7 +2500,7 @@ function openDonateModal(uname){
 // the language switcher.
 // ===============================
 function renderConsumerSettings(root){
-  root.innerHTML = `
+  root.insertAdjacentHTML('beforeend', `
     <div class="section-head"><h3>${t('settings')}</h3></div>
     <div class="card">
       <div class="settings-row"><div><div class="settings-row-label">❓ Help &amp; how to use Uzhavan Direct</div>
@@ -2493,7 +2510,7 @@ function renderConsumerSettings(root){
       <div class="settings-row"><div class="settings-row-label">🌐 Language</div>
         <select id="settingsLang2" class="lang-select"><option value="en">English</option><option value="ta">தமிழ்</option><option value="hi">हिन्दी</option></select></div>
     </div>
-  `;
+  `);
   document.getElementById('goFollowing').onclick = ()=> goTo('following');
   document.getElementById('settingsLang2').value = lang;
   document.getElementById('settingsLang2').onchange = e=>{

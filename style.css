@@ -103,7 +103,9 @@ button{font-family:inherit;cursor:pointer;}
 .topbar-title{font-family:'Fraunces',serif;font-size:21px;font-weight:600;color:var(--forest-dark);}
 .topbar-right{margin-left:auto;display:flex;align-items:center;gap:14px;}
 .lang-select{padding:7px 10px;border-radius:var(--radius-sm);border:1px solid var(--line);font-size:13px;background:#fff;}
-.user-chip{background:var(--paper);padding:7px 14px;border-radius:999px;font-size:13.5px;font-weight:600;color:var(--forest-dark);}
+.user-chip{background:var(--paper);padding:7px 14px;border:0;border-radius:999px;font-size:13.5px;font-weight:600;color:var(--forest-dark);}
+.user-chip:hover{background:#e6ece0;}
+.user-chip:focus-visible{outline:2px solid var(--forest);outline-offset:2px;}
 
 /* ===============================
    DONATION NOTIFICATIONS

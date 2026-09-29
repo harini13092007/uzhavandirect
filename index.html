@@ -53,7 +53,7 @@
           <input type="password" id="loginPass" placeholder="Enter password" required>
         </label>
         <button type="submit" class="btn-primary">Log in as <span class="roleLabelInline">Farmer</span></button>
-        <p class="auth-hint">Demo accounts — Farmer: <b>karthik_farms</b> / <b>pass123</b>. Consumer: <b>divya_buys</b> / <b>pass123</b></p>
+        <p class="auth-hint">Demo login — select Farmer or Consumer, then use <b>john</b> / <b>123</b>.</p>
       </form>
 
       <!-- SIGNUP FORM (Sign-up + demo OTP verification) -->
@@ -129,7 +129,7 @@
           <div id="notifPanel" class="notif-panel hidden"></div>
         </div>
 
-        <div class="user-chip" id="userChip">👤 <span id="userChipName">User</span></div>
+        <button class="user-chip" id="userChip" type="button" aria-label="Open profile and settings">👤 <span id="userChipName">User</span></button>
       </div>
     </header>
 
