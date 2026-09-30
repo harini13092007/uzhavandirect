@@ -204,7 +204,7 @@ button{font-family:inherit;cursor:pointer;}
 .theme-settings-btn:focus-visible,.theme-option:focus-visible{outline:2px solid var(--forest);outline-offset:2px;}
 .settings-anchor{scroll-margin-top:96px;}
 .theme-picker-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:8px 0 18px;}
-.theme-panel-title{padding:7px 9px 9px;color:var(--ink-soft);font-size:11px;font-weight:700;text-transform:uppercase;}
+.theme-panel-title{grid-column:1/-1;padding:7px 9px 9px;color:var(--ink-soft);font-size:11px;font-weight:700;text-transform:uppercase;}
 .theme-option{display:flex;width:100%;align-items:center;justify-content:space-between;gap:10px;padding:9px;border:0;border-radius:var(--radius-sm);background:transparent;color:var(--ink);font:inherit;font-size:13px;text-align:left;}
 .theme-option{min-height:48px;border:1px solid var(--line);background:var(--card);}
 .theme-option:hover,.theme-option.selected{background:var(--paper);border-color:var(--forest);}
