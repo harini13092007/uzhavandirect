@@ -19,7 +19,8 @@ const I18N = {
       profile:"Profile",welcome:"Welcome back",brandFirst:"Uzhavan",brandSecond:"Direct",
       brandName:"Uzhavan Direct",brandTagline:"From the field to your home, with fair prices and no middlemen.",
       appearance:"Appearance",brightMode:"Bright",darkMode:"Dark",language:"Language",
-      colorTheme:"Color theme",choosePalette:"Choose a palette for the app.",home:"Go to dashboard"},
+      colorTheme:"Color theme",choosePalette:"Choose a palette for the app.",loginReturn:"Return to login",
+      chooseTheme:"Choose a color theme",themeHarvest:"Harvest",themeEmerald:"Emerald",themeTeal:"Teal"},
     ta:{dashboard:"முகப்புப் பலகை",sellItem:"விளைபொருள் விற்பனை",bidding:"ஏலம்",demand:"சந்தைத் தேவை",
       aiChat:"AI விவசாய ஆலோசகர்",settings:"விருப்பங்கள்",itemsOrdered:"வாங்கிய பொருட்கள்",cart:"கூடை",
       history:"வாங்கிய பொருட்களின் வரலாறு",farmerProfile:"விவசாயி விவரம்",following:"நீங்கள் பின்தொடரும் விவசாயிகள்",moneyDetails:"வரவு செலவு விவரங்கள்",
@@ -28,7 +29,8 @@ const I18N = {
       profile:"சுயவிவரம்",welcome:"மீண்டும் வரவேற்கிறோம்",brandFirst:"உழவர்",brandSecond:"சந்தை",
       brandName:"உழவர் சந்தை",brandTagline:"வயலிலிருந்து உங்கள் இல்லத்திற்கு; இடைத்தரகர் இன்றி, உழவருக்கு நியாயமான விலை.",
       appearance:"காட்சி அமைப்பு",brightMode:"ஒளிமுறை",darkMode:"இருள்முறை",language:"மொழி",
-      colorTheme:"வண்ணத் தோற்றம்",choosePalette:"பயன்பாட்டின் வண்ணங்களைத் தேர்ந்தெடுக்கவும்.",home:"முகப்புக்குச் செல்ல"},
+      colorTheme:"வண்ணத் தோற்றம்",choosePalette:"பயன்பாட்டின் வண்ணங்களைத் தேர்ந்தெடுக்கவும்.",loginReturn:"உள்நுழைவுக்குத் திரும்பு",
+      chooseTheme:"வண்ணத் தோற்றத்தைத் தேர்ந்தெடுக்கவும்",themeHarvest:"அறுவடை",themeEmerald:"மரகதம்",themeTeal:"டீல்"},
     hi:{dashboard:"मुख्य पटल",sellItem:"उपज बेचें",bidding:"नीलामी",demand:"बाज़ार की मांग",
       aiChat:"खेती सलाहकार",settings:"प्राथमिकताएँ",itemsOrdered:"खरीदे गए सामान",cart:"टोकरी",
       history:"खरीद का इतिहास",farmerProfile:"किसान परिचय",following:"आप जिन किसानों से जुड़े हैं",moneyDetails:"आय-व्यय विवरण",
@@ -37,7 +39,8 @@ const I18N = {
       profile:"परिचय",welcome:"फिर से स्वागत है",brandFirst:"किसान",brandSecond:"मंडी",
       brandName:"किसान मंडी",brandTagline:"खेत से आपके घर तक; बिना बिचौलियों के, किसान को उचित दाम।",
       appearance:"दिखावट",brightMode:"उजला रूप",darkMode:"गहरा रूप",language:"भाषा",
-      colorTheme:"रंग रूप",choosePalette:"ऐप के लिए रंग चुनें।",home:"मुख्य पटल पर जाएँ"}
+      colorTheme:"रंग रूप",choosePalette:"ऐप के लिए रंग चुनें।",loginReturn:"लॉग इन पर लौटें",
+      chooseTheme:"रंग थीम चुनें",themeHarvest:"फ़सल",themeEmerald:"पन्ना",themeTeal:"टील"}
 };
 let lang = localStorage.getItem('ud_lang') || 'en';
 function t(key){ return (I18N[lang] && I18N[lang][key]) || I18N.en[key] || key; }
@@ -53,7 +56,7 @@ function updateLocalizedBrand(){
   document.getElementById('brandSecond').textContent = copy.brandSecond;
   document.getElementById('brandName').textContent = copy.brandName;
   document.getElementById('brandTagline').textContent = copy.brandTagline;
-  document.getElementById('brandHomeBtn').setAttribute('aria-label',copy.home);
+  document.getElementById('brandLoginBtn').setAttribute('aria-label',copy.loginReturn);
 }
 
 function colorModeSettingsMarkup(){
@@ -81,18 +84,24 @@ function bindColorModeButtons(){
   });
 }
 
+/* Three curated palettes only. The two that were dropped (acid lime and the
+ * muddy tan one) clashed with the produce photography and with dark mode.
+ * `theme1` (Harvest) is the app default and is mirrored by the `:root` block
+ * at the top of style.css — keep the two in sync when editing colours. */
 const THEMES = [
-  {id:'theme2', name:'Theme 1', colors:['#0D3A35','#276152','#B1B7AB','#FBF6F0']},
-  {id:'theme3', name:'Theme 2', colors:['#F4F1EB','#7AA05A','#2D5A4A','#0D4C3C']},
-  {id:'theme4', name:'Theme 3', colors:['#D1F2EB','#50C878','#0B6E4F','#013220']},
-  {id:'theme5', name:'Theme 4', colors:['#E2F0CC','#8BC53D','#012F13','#011207']},
-  {id:'theme6', name:'Theme 5', colors:['#D6BD98','#677D6A','#40534C','#1A3636']}
+  {id:'theme1', nameKey:'themeHarvest', colors:['#F6F3EA','#2F6B41','#E0A136','#143525']},
+  {id:'theme2', nameKey:'themeEmerald', colors:['#EAF7F1','#0B7A54','#57C98C','#06392A']},
+  {id:'theme3', nameKey:'themeTeal', colors:['#FBF6F0','#1F4F45','#C97B2E','#0D3A35']}
 ];
+const DEFAULT_THEME = 'theme1';
 
 function setTheme(themeId){
-  const selected = THEMES.find(theme=>theme.id===themeId) || THEMES.find(theme=>theme.id==='theme4');
+  const selected = THEMES.find(theme=>theme.id===themeId) || THEMES.find(theme=>theme.id===DEFAULT_THEME);
   document.documentElement.dataset.theme = selected.id;
   localStorage.setItem('ud_theme', selected.id);
+  // Keeps the mobile browser chrome in step with the chosen palette.
+  const themeColorTag = document.querySelector('meta[name="theme-color"]');
+  if (themeColorTag) themeColorTag.setAttribute('content', selected.colors[1]);
   renderThemeMenu();
 }
 
@@ -100,9 +109,9 @@ function renderThemeMenu(){
   const panel = document.getElementById('themePanel');
   if (!panel) return;
   const activeTheme = document.documentElement.dataset.theme;
-  panel.innerHTML = `<div class="theme-panel-title">Choose a color theme</div>` + THEMES.map(theme=>`
+  panel.innerHTML = `<div class="theme-panel-title">${t('chooseTheme')}</div>` + THEMES.map(theme=>`
     <button class="theme-option${theme.id===activeTheme?' selected':''}" type="button" data-theme="${theme.id}" aria-pressed="${theme.id===activeTheme}">
-      <span>${theme.name}</span>
+      <span>${t(theme.nameKey)}</span>
       <span class="theme-swatches" aria-hidden="true">${theme.colors.map(color=>`<span style="background:${color}"></span>`).join('')}</span>
     </button>`).join('');
   panel.querySelectorAll('.theme-option').forEach(button=>{
@@ -113,7 +122,7 @@ function renderThemeMenu(){
 function setupThemePicker(){
   const button = document.getElementById('settingsShortcutBtn');
   const savedTheme = localStorage.getItem('ud_theme');
-  setTheme(THEMES.some(theme=>theme.id===savedTheme) ? savedTheme : 'theme4');
+  setTheme(THEMES.some(theme=>theme.id===savedTheme) ? savedTheme : DEFAULT_THEME);
   button.onclick = ()=>{
     goTo('settings');
   };
@@ -152,10 +161,68 @@ function iconFor(name, category){
   return map[key] || CATEGORY_ICONS[category] || "🌿";
 }
 
+/* Bundled sample photos, served from the repo (see assets/products/CREDITS.md).
+ * Keeping them local means produce imagery still works offline and the Sell
+ * form can offer one-click sample images for testing. Keys are either a
+ * category or an exact produce name (e.g. "Tomato"). */
+const PRODUCT_PHOTOS = {
+  vegetable:'assets/products/carrot.jpg',
+  fruit:'assets/products/mango.jpg',
+  dairy:'assets/products/milk.jpg',
+  'grains/cereals/pulses':'assets/products/rice.jpg',
+  Rice:'assets/products/rice.jpg',
+  Wheat:'assets/products/wheat.jpg',
+  Tomato:'assets/products/tomato.jpg',
+  Onion:'assets/products/onion.jpg',
+  Potato:'assets/products/potato.jpg',
+  Carrot:'assets/products/carrot.jpg',
+  Brinjal:'assets/products/brinjal.jpg',
+  Spinach:'assets/products/spinach.jpg',
+  Coconut:'assets/products/coconut.jpg',
+  Mango:'assets/products/mango.jpg',
+  Banana:'assets/products/banana.jpg',
+  Milk:'assets/products/milk.jpg',
+  Eggs:'assets/products/eggs.jpg',
+  Turmeric:'assets/products/turmeric.jpg',
+  'Toor Dal':'assets/products/toor-dal.jpg'
+};
+// Names offered as quick-pick thumbnails by the Sell Produce form.
+const SAMPLE_PRODUCT_PHOTOS = ['Rice','Wheat','Tomato','Onion','Potato','Carrot','Brinjal','Spinach','Mango','Banana','Coconut','Milk','Eggs','Turmeric','Toor Dal']
+  .map(name=>({name, src:PRODUCT_PHOTOS[name]}));
+function productImageUrl(product={}){
+  if (product.image) return product.image;
+  const name = String(product.name || '').trim();
+  if (name && PRODUCT_PHOTOS[name]) return PRODUCT_PHOTOS[name];
+  const savedProduct = store.produce()?.find(item=>item.name.toLowerCase()===name.toLowerCase());
+  return PRODUCT_PHOTOS[product.category || savedProduct?.category] || PRODUCT_PHOTOS.vegetable;
+}
+function productImageMarkup(product, className=''){
+  return `<img class="${className}" src="${productImageUrl(product)}" alt="${product.name || 'Produce'}" loading="lazy">`;
+}
+function compressProductImage(file){
+  return new Promise((resolve,reject)=>{
+    const objectUrl = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = ()=>{
+      const scale = Math.min(1,900/Math.max(image.naturalWidth,image.naturalHeight));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(image.naturalWidth*scale);
+      canvas.height = Math.round(image.naturalHeight*scale);
+      const context = canvas.getContext('2d');
+      if (!context){ URL.revokeObjectURL(objectUrl); reject(new Error('Image processing is unavailable.')); return; }
+      context.drawImage(image,0,0,canvas.width,canvas.height);
+      URL.revokeObjectURL(objectUrl);
+      resolve(canvas.toDataURL('image/jpeg',.82));
+    };
+    image.onerror = ()=>{ URL.revokeObjectURL(objectUrl); reject(new Error('Could not read that image.')); };
+    image.src = objectUrl;
+  });
+}
+
 /* ===============================
    SEED / DEMO DATA
    Runs once (guarded by the
-   'ud_seeded' flag) to pre-fill
+   'ud_seeded_v2' flag) to pre-fill
    localStorage with demo farmers,
    consumers, produce, orders,
    auctions and demand numbers so
@@ -163,7 +230,7 @@ function iconFor(name, category){
    without any backend.
    =============================== */
 function seed(){
-  if (localStorage.getItem('ud_seeded')) return;
+  if (localStorage.getItem('ud_seeded_v2')) return;
 
   const users = {
     // notifications:[] holds alerts for this user, e.g. "you got a donation"
@@ -175,6 +242,8 @@ function seed(){
         following:["karthik_farms"],city:"Chennai",address:"14 Anna Nagar, Chennai, Tamil Nadu"}
   };
 
+  // Every item carries a local sample photo so the marketplace grid, cart and
+  // tracking screens can all be checked with real imagery.
   const produce = [
     {id:"p1",farmer:"karthik_farms",name:"Rice",category:"grains/cereals/pulses",qty:500,price:42,unit:"kg"},
     {id:"p2",farmer:"karthik_farms",name:"Tomato",category:"vegetable",qty:120,price:28,unit:"kg"},
@@ -182,8 +251,16 @@ function seed(){
     {id:"p4",farmer:"karthik_farms",name:"Mango",category:"fruit",qty:80,price:60,unit:"kg"},
     {id:"p5",farmer:"meena_agro",name:"Milk",category:"dairy",qty:60,price:52,unit:"litre"},
     {id:"p6",farmer:"meena_agro",name:"Carrot",category:"vegetable",qty:90,price:30,unit:"kg"},
-    {id:"p7",farmer:"meena_agro",name:"Toor Dal",category:"grains/cereals/pulses",qty:150,price:110,unit:"kg"}
-  ].map(p=>({...p, icon:iconFor(p.name,p.category), perish:guessPerishability(p.name,p.category), sold:false}));
+    {id:"p7",farmer:"meena_agro",name:"Toor Dal",category:"grains/cereals/pulses",qty:150,price:110,unit:"kg"},
+    {id:"p8",farmer:"karthik_farms",name:"Wheat",category:"grains/cereals/pulses",qty:700,price:32,unit:"kg"},
+    {id:"p9",farmer:"karthik_farms",name:"Brinjal",category:"vegetable",qty:70,price:22,unit:"kg"},
+    {id:"p10",farmer:"karthik_farms",name:"Potato",category:"vegetable",qty:220,price:26,unit:"kg"},
+    {id:"p11",farmer:"meena_agro",name:"Banana",category:"fruit",qty:90,price:45,unit:"kg"},
+    {id:"p12",farmer:"meena_agro",name:"Spinach",category:"vegetable",qty:45,price:18,unit:"kg"},
+    {id:"p13",farmer:"meena_agro",name:"Eggs",category:"dairy",qty:40,price:90,unit:"dozen"},
+    {id:"p14",farmer:"meena_agro",name:"Coconut",category:"fruit",qty:120,price:38,unit:"dozen"},
+    {id:"p15",farmer:"karthik_farms",name:"Turmeric",category:"grains/cereals/pulses",qty:60,price:180,unit:"kg"}
+  ].map(p=>({...p, image:PRODUCT_PHOTOS[p.name], icon:iconFor(p.name,p.category), perish:guessPerishability(p.name,p.category), sold:false}));
 
   const orders = [
     {id:"o1",farmer:"karthik_farms",consumer:"Divya Sundar",item:"Rice",qty:10,unit:"kg",price:420,
@@ -203,7 +280,7 @@ function seed(){
       highestBid:48,highestBidder:null,endsAt:Date.now()+1000*60*45,sold:false}
   ];
 
-  const demandHistory = {Rice:340,Tomato:280,Onion:250,Milk:210,Mango:150,Carrot:95,"Toor Dal":70};
+  const demandHistory = {Rice:340,Tomato:280,Onion:250,Milk:210,Mango:150,Carrot:95,"Toor Dal":70,Banana:60,Potato:55,Eggs:40};
 
   localStorage.setItem('ud_users', JSON.stringify(users));
   localStorage.setItem('ud_produce', JSON.stringify(produce));
@@ -217,7 +294,9 @@ function seed(){
   // ud_ratings is the single ledger of every consumer→farmer rating
   // (see the FARMER RATING section below for how it's used).
   localStorage.setItem('ud_ratings', JSON.stringify([]));
-  localStorage.setItem('ud_seeded', '1');
+  // Bumped from ud_seeded so existing demo sessions also pick up the new
+  // bundled sample photos on their next page load.
+  localStorage.setItem('ud_seeded_v2', '1');
 }
 seed();
 
@@ -321,7 +400,8 @@ function farmerDonationsTotal(farmerId){
 }
 
 /* ---------- Auth state ---------- */
-let currentUser = localStorage.getItem('ud_currentUser') || null; // username
+localStorage.removeItem('ud_currentUser');
+let currentUser = null; // Require login on each fresh page visit.
 let currentRole = null; // 'farmer' | 'consumer'
 let selectedRole = 'farmer'; // role toggle on auth screen
 let pendingOtp = null;
@@ -558,11 +638,16 @@ function loginAs(username){
   boot();
 }
 
-document.getElementById('logoutBtn').onclick = ()=>{
+function showLoginScreen(){
+  const loginRole = currentRole || selectedRole;
   currentUser = null; currentRole = null;
   localStorage.removeItem('ud_currentUser');
+  setAuthRole(loginRole);
+  document.querySelector('.auth-tab[data-tab="login"]').click();
   boot();
-};
+}
+
+document.getElementById('logoutBtn').onclick = showLoginScreen;
 
 document.getElementById('langSelect').value = lang;
 document.getElementById('langSelect').onchange = e=>{
@@ -576,9 +661,8 @@ setupThemePicker();
 document.getElementById('menuToggle').onclick = ()=>{
   document.querySelector('.sidebar').classList.toggle('open');
 };
-document.getElementById('brandHomeBtn').onclick = ()=>{
-  goTo('dashboard');
-  window.scrollTo({top:0,behavior:'smooth'});
+document.getElementById('brandLoginBtn').onclick = ()=>{
+  showLoginScreen();
 };
 document.getElementById('userChip').onclick = ()=> goTo('profile');
 
@@ -620,18 +704,18 @@ document.addEventListener('click', e=>{
    and switch the current view.
    =============================== */
 const FARMER_NAV = [
-  {id:'dashboard', icon:'📊', key:'dashboard'},
-  {id:'sell', icon:'🌱', key:'sellItem'},
-  {id:'bidding', icon:'⚖️', key:'bidding'},
-  {id:'demand', icon:'📈', key:'demand'},
-  {id:'chat', icon:'💬', key:'aiChat'}
+  {id:'dashboard', key:'dashboard'},
+  {id:'sell', key:'sellItem'},
+  {id:'bidding', key:'bidding'},
+  {id:'demand', key:'demand'},
+  {id:'chat', key:'aiChat'}
 ];
 const CONSUMER_NAV = [
-  {id:'dashboard', icon:'📊', key:'dashboard'},
-  {id:'nearby', icon:'📍', key:'nearby'},
-  {id:'bidding', icon:'⚖️', key:'bidding'},
-  {id:'search', icon:'🔍', key:'search'},
-  {id:'history', icon:'🕘', key:'history'}
+  {id:'dashboard', key:'dashboard'},
+  {id:'nearby', key:'nearby'},
+  {id:'bidding', key:'bidding'},
+  {id:'search', key:'search'},
+  {id:'history', key:'history'}
 ];
 
 let currentView = 'dashboard';
@@ -647,7 +731,7 @@ function renderNav(){
   nav.forEach(item=>{
     const btn = document.createElement('button');
     btn.className = 'nav-item' + (item.id===currentView ? ' active':'');
-    btn.innerHTML = `<span>${item.icon}</span><span>${t(item.key)}</span>`;
+    btn.textContent = t(item.key);
     btn.onclick = ()=> goTo(item.id);
     el.appendChild(btn);
   });
@@ -750,7 +834,7 @@ function produceCardEl(p, isOwner){
   const div = document.createElement('div');
   div.className = 'produce-card';
   div.innerHTML = `
-    <div class="produce-img">${p.icon}</div>
+    <div class="produce-img">${productImageMarkup(p,'product-photo')}</div>
     <div class="produce-body">
       <div class="produce-name">${p.name}</div>
       <div class="produce-meta">${p.qty} ${p.unit} available</div>
@@ -1244,6 +1328,7 @@ function renderMoneyTable(root){
 }
 
 function renderSellItem(root){
+  let selectedProductImage = '';
   root.innerHTML = `
     <div class="section-head"><h3>${t('sellItem')}</h3></div>
     <div class="card">
@@ -1268,12 +1353,56 @@ function renderSellItem(root){
         <label class="full">Price per unit (₹)
           <input type="number" id="sPrice" placeholder="e.g. 30" min="1">
         </label>
+        <label class="full">Product image (optional)
+          <input type="file" id="sImage" accept="image/*">
+        </label>
+        <!-- BUNDLED SAMPLE PHOTOS: one-click images so listings can be tested
+             without hunting for your own picture. -->
+        <div class="full sample-photo-picker">
+          <span class="sample-photo-label">Or pick a sample photo</span>
+          <div class="sample-photo-row" id="samplePhotoRow">
+            ${SAMPLE_PRODUCT_PHOTOS.map(sample=>`<button type="button" class="sample-photo" data-src="${sample.src}" title="${sample.name}" aria-label="Use the sample ${sample.name} photo"><img src="${sample.src}" alt="" loading="lazy"></button>`).join('')}
+          </div>
+        </div>
+        <div class="image-upload-preview full"><img id="sImagePreview" src="${PRODUCT_PHOTOS.vegetable}" alt="Product image preview"></div>
       </div>
       <button class="btn-primary" id="addProduceBtn" style="margin-top:16px;">＋ Add produce</button>
     </div>
     <div class="section-head" style="margin-top:24px;"><h3>Live on marketplace</h3></div>
     <div class="produce-grid" id="myProduce2"></div>
   `;
+  const imageInput = document.getElementById('sImage');
+  const imagePreview = document.getElementById('sImagePreview');
+  const nameInput = document.getElementById('sName');
+  const categorySelect = document.getElementById('sCategory');
+  // Previews the sample photo that matches what has been typed / selected.
+  const previewFromFields = ()=>{
+    if (selectedProductImage) return;
+    const typed = nameInput.value.trim().toLowerCase();
+    const match = Object.keys(PRODUCT_PHOTOS).find(key=>key.toLowerCase()===typed);
+    imagePreview.src = PRODUCT_PHOTOS[match] || PRODUCT_PHOTOS[categorySelect.value] || PRODUCT_PHOTOS.vegetable;
+  };
+  nameInput.addEventListener('input', previewFromFields);
+  categorySelect.onchange = previewFromFields;
+  const sampleRow = document.getElementById('samplePhotoRow');
+  sampleRow.addEventListener('click', event=>{
+    const button = event.target.closest('.sample-photo');
+    if (!button) return;
+    selectedProductImage = button.dataset.src;
+    imagePreview.src = selectedProductImage;
+    sampleRow.querySelectorAll('.sample-photo').forEach(el=>el.classList.toggle('selected', el===button));
+  });
+  imageInput.onchange = async ()=>{
+    const file = imageInput.files[0];
+    if (!file){ selectedProductImage=''; previewFromFields(); return; }
+    try{
+      selectedProductImage = await compressProductImage(file);
+      imagePreview.src = selectedProductImage;
+    } catch(error){
+      imageInput.value = '';
+      toast(error.message);
+    }
+  };
   document.getElementById('addProduceBtn').onclick = ()=>{
     const name = document.getElementById('sName').value.trim();
     const category = document.getElementById('sCategory').value;
@@ -1283,7 +1412,7 @@ function renderSellItem(root){
     if (!name || !qty || !price){ toast("⚠️ Fill in all fields."); return; }
     const produce = store.produce();
     produce.push({id:'p'+Date.now(), farmer:currentUser, name, category, qty, unit, price,
-      icon:iconFor(name,category), perish:guessPerishability(name,category), sold:false});
+      image:selectedProductImage, icon:iconFor(name,category), perish:guessPerishability(name,category), sold:false});
     store.saveProduce(produce);
     toast(`✅ ${name} listed on the marketplace`);
     renderView('sell');
@@ -1326,7 +1455,7 @@ function renderFarmerBidding(root){
     const qty = Number(document.getElementById('aQty').value);
     if (!p || !base || !qty){ toast("⚠️ Fill all auction fields."); return; }
     const auctions = store.auctions();
-    auctions.push({id:'a'+Date.now(), farmer:currentUser, item:p.name, icon:p.icon, baseRate:base,
+    auctions.push({id:'a'+Date.now(), farmer:currentUser, item:p.name, image:p.image, icon:p.icon, baseRate:base,
       unit:p.unit, qty, highestBid:base, highestBidder:null, endsAt:Date.now()+hrs*3600*1000, sold:false});
     store.saveAuctions(auctions);
     toast("🚀 Auction started!");
@@ -1341,7 +1470,7 @@ function renderAuctionList(container, auctions, biddable){
   auctions.forEach(a=>{
     const div = document.createElement('div'); div.className = 'auction-card';
     div.innerHTML = `
-      <div class="auction-icon">${a.icon}</div>
+      <div class="auction-icon">${productImageMarkup({name:a.item,image:a.image,category:store.produce().find(p=>p.farmer===a.farmer && p.name===a.item)?.category},'product-photo')}</div>
       <div class="auction-info">
         <div class="order-item-name">${a.item} <span class="order-sub">(${a.qty} ${a.unit}, base ${money(a.baseRate)})</span></div>
         <div class="auction-bid-row">
@@ -1386,7 +1515,7 @@ function closeAuctionIfNeeded(a){
   store.saveAuctions(auctions);
   if (live.highestBidder === getUser(currentUser)?.name && currentRole==='consumer'){
     const cart = store.cart(currentUser);
-    cart.push({id:'c'+Date.now(), name:live.item, icon:live.icon, qty:live.qty, unit:live.unit,
+    cart.push({id:'c'+Date.now(), name:live.item, image:live.image, icon:live.icon, qty:live.qty, unit:live.unit,
       price:live.highestBid, farmer:live.farmer});
     store.saveCart(currentUser, cart);
     toast(`🏆 You won the auction for ${live.item}! Added to your cart.`);
@@ -1430,7 +1559,7 @@ function renderDemand(root){
   const card = document.getElementById('demandCard');
   sorted.forEach(([name,val],i)=>{
     const row = document.createElement('div'); row.className='demand-row';
-    row.innerHTML = `<div class="demand-rank">#${i+1}</div><div class="demand-name">${iconFor(name,'')} ${name}</div>
+    row.innerHTML = `<div class="demand-rank">#${i+1}</div><div class="demand-name"><img class="demand-product-image" src="${productImageUrl({name})}" alt="">${name}</div>
       <div class="demand-bar-track"><div class="demand-bar-fill" style="width:${(val/max*100).toFixed(0)}%"></div></div>
       <div class="demand-val">${val} orders</div>`;
     card.appendChild(row);
@@ -1759,7 +1888,8 @@ function addToCart(p, qty){
   if (existing){
     existing.qty += qty;
     existing.productId ||= p.id;
-  } else cart.push({id:'c'+Date.now(), productId:p.id, name:p.name, icon:p.icon, qty, unit:p.unit, price:p.price, farmer:p.farmer});
+    existing.image ||= p.image;
+  } else cart.push({id:'c'+Date.now(), productId:p.id, name:p.name, image:p.image, icon:p.icon, qty, unit:p.unit, price:p.price, farmer:p.farmer});
   store.saveCart(currentUser, cart);
   renderCartDrawer();
   toast(`🛒 Added ${p.name} to cart`);
@@ -1777,7 +1907,7 @@ function openCartQuantityPicker(product, initialQty=1, sourceElement=null){
   pendingCartProduct = product;
   pendingCartSource = sourceElement;
   currentCartPickerQty = Math.max(1,Number(initialQty)||1);
-  document.getElementById('qtyModalEmoji').textContent = product.icon || '🌿';
+  document.getElementById('qtyModalImage').innerHTML = productImageMarkup(product,'product-photo');
   document.getElementById('qtyModalTitle').textContent = product.name;
   document.getElementById('qtyModalSubtitle').textContent = `${money(product.price)} / ${product.unit}`;
   document.getElementById('qtyPickerUnit').textContent = product.unit;
@@ -1856,7 +1986,9 @@ function animateAddToCart(sourceElement,onComplete){
   const targetRect = cartButton.getBoundingClientRect();
   const flyer = document.createElement('div');
   flyer.className='cart-flying-item';
-  flyer.textContent = sourceElement.textContent.trim() || '🌿';
+  const sourceImage = sourceElement.querySelector('img');
+  if (sourceImage) flyer.appendChild(sourceImage.cloneNode());
+  else flyer.textContent = sourceElement.textContent.trim();
   flyer.style.left=`${sourceRect.left+sourceRect.width/2}px`;
   flyer.style.top=`${sourceRect.top+sourceRect.height/2}px`;
   document.body.appendChild(flyer);
@@ -1997,7 +2129,7 @@ function renderCart(root){
   cart.forEach(c=>{
     total += c.price * c.qty;
     const row = document.createElement('div'); row.className='cart-row';
-    row.innerHTML = `<div style="font-size:26px;">${c.icon}</div>
+    row.innerHTML = `<div class="cart-page-image">${productImageMarkup(c,'product-photo')}</div>
       <div style="flex:1;">
         <div class="order-item-name">${c.name}</div>
         <div class="order-sub">${money(c.price)} / ${c.unit} · sold by ${getUser(c.farmer)?.name||c.farmer}</div>
@@ -2037,7 +2169,7 @@ function renderCartDrawer(){
   drawerList.innerHTML = cart.map(item=>{
     const farmerName = getUser(item.farmer)?.name || item.farmer;
     return `<article class="cart-item-row" data-id="${item.id}">
-      <div class="cart-item-emoji" aria-hidden="true">${item.icon}</div>
+      <div class="cart-item-image" aria-hidden="true">${productImageMarkup(item,'product-photo')}</div>
       <div class="cart-item-details">
         <h4 class="cart-item-title">${item.name}</h4>
         <p class="cart-item-farmer">${farmerName}</p>
@@ -2255,7 +2387,7 @@ function renderNearby(root){
     div.innerHTML = `<div class="avatar">${farmer.name.split(' ').map(x=>x[0]).join('').slice(0,2)}</div>
       <div style="flex:1;">
         <div class="order-item-name">${farmer.name} <span class="dist-badge" title="Straight-line distance between city centres">${distanceLabel}</span></div>
-        <div class="order-sub">${farmer.village||''} · ${produce.map(p=>p.icon+' '+p.name).join('  ')}</div>
+        <div class="farmer-produce-list">${produce.map(p=>`<span class="farmer-produce-chip">${productImageMarkup(p,'farmer-produce-thumb')}<span>${p.name}</span></span>`).join('')}</div>
       </div>
       <button class="pill-btn" data-a="produce">View produce</button>
       <button class="pill-btn" data-a="profile">View Profile</button>`;
