@@ -573,6 +573,86 @@ tr:hover td{background:var(--paper);}
   .delivery-schedule-form .btn-success{width:100%;}
 }
 
+/* ===============================
+   FPO MANAGER PORTAL
+   Styles for the three-tier FPO
+   workflow (see FPO PORTAL in app.js):
+   dashboard tier cards, Tier-1
+   weighment / AGMARK grade picker,
+   Tier-2 LTL capacity meter + batch
+   cards, Tier-3 delivery-slot chips
+   and EV agent assignment rows.
+   =============================== */
+
+/* Three-up pipeline cards on the FPO dashboard */
+.fpo-tier-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;}
+.fpo-tier-card{display:flex;flex-direction:column;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:var(--radius-md);padding:18px;box-shadow:var(--shadow);}
+.fpo-tier-step{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--turmeric-dark);}
+.fpo-tier-card h4{font-family:'Fraunces',serif;font-size:17px;color:var(--forest-dark);}
+.fpo-tier-card p{margin:0;flex:1;color:var(--ink-soft);font-size:13px;line-height:1.5;}
+.fpo-tier-count{font-size:12.5px;font-weight:600;color:var(--forest-dark);background:var(--paper);border-radius:999px;padding:6px 10px;width:fit-content;}
+.fpo-tier-card .pill-btn{align-self:flex-start;}
+
+/* Tier-1: digital weighment input + AGMARK grade picker */
+.fpo-weigh-input{width:96px;padding:7px 9px;border-radius:var(--radius-sm);border:1px solid var(--line);font-family:inherit;font-size:14px;}
+.grade-picker{display:flex;flex-wrap:wrap;gap:6px;}
+.grade-btn{border:1px solid var(--line);background:var(--paper);color:var(--ink-soft);padding:6px 10px;border-radius:999px;font-size:11.5px;font-weight:700;transition:.15s;}
+.grade-btn:hover{border-color:var(--forest);color:var(--forest-dark);}
+.grade-btn.selected{background:var(--forest);border-color:var(--forest);color:#fff;}
+.fpo-grade-btn{margin-top:0;padding:8px 12px;font-size:12.5px;white-space:nowrap;}
+.fpo-muted-row td{color:var(--ink-soft);}
+.fpo-empty-cell{color:var(--ink-soft);font-size:13px;padding:18px 12px;}
+/* AGMARK grade badges (Tier-1 graded list + Tier-2 queue chips) */
+.grade-badge-A{background:#E3F3E8;color:var(--success);}
+.grade-badge-B{background:#FCEEDC;color:var(--soil);}
+.grade-badge-C{background:var(--paper);color:var(--ink-soft);}
+:root[data-mode="dark"] .grade-badge-A{background:#1D3A2A;}
+:root[data-mode="dark"] .grade-badge-B{background:#3B2A17;}
+
+/* Tier-2: LTL capacity meter + batching queue */
+.capacity-meter{margin-top:16px;}
+.capacity-legend{display:flex;justify-content:space-between;font-size:12.5px;color:var(--ink-soft);margin-bottom:6px;}
+.capacity-legend strong{color:var(--forest-dark);}
+.capacity-track{height:12px;border-radius:999px;background:var(--paper);border:1px solid var(--line);overflow:hidden;}
+.capacity-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,var(--forest-light),var(--forest));transition:width .25s ease;}
+.capacity-fill.over{background:linear-gradient(90deg,#E0906F,var(--danger));}
+.fpo-queue-list{margin-top:14px;display:flex;flex-direction:column;gap:8px;}
+.fpo-queue-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 12px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--paper);font-size:13px;}
+.fpo-queue-check{width:16px;height:16px;accent-color:var(--forest);cursor:pointer;}
+.fpo-queue-id{font-weight:700;color:var(--forest-dark);}
+.fpo-queue-item{flex:1;min-width:130px;}
+.fpo-queue-weight{font-variant-numeric:tabular-nums;}
+.batch-card{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;background:var(--card);border:1px solid var(--line);border-radius:var(--radius-md);padding:14px 16px;box-shadow:var(--shadow);}
+.batch-card + .batch-card{margin-top:10px;}
+.batch-meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;font-size:12.5px;color:var(--ink-soft);}
+.batch-actions{display:flex;align-items:center;gap:10px;}
+/* Batch transit status chips */
+.status-chip{display:inline-block;font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;margin-left:6px;}
+.status-chip.assembling{background:#FCEEDC;color:var(--soil);}
+.status-chip.dispatched{background:#E3EBF7;color:#2B5F9E;}
+.status-chip.received{background:#E3F3E8;color:var(--success);}
+:root[data-mode="dark"] .status-chip.assembling{background:#3B2A17;}
+:root[data-mode="dark"] .status-chip.dispatched{background:#1B2A3D;}
+:root[data-mode="dark"] .status-chip.received{background:#1D3A2A;}
+
+/* Tier-3: consumer delivery-slot chips + EV agent assignment */
+.slot-chip{display:inline-block;margin-top:6px;padding:5px 10px;border:1px dashed var(--forest-light);border-radius:var(--radius-sm);background:var(--paper);font-size:12px;font-weight:600;color:var(--forest-dark);}
+.slot-chip.awaiting{border-color:var(--line);color:var(--ink-soft);}
+.fpo-ev-assign{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.fpo-ev-assign select{padding:8px 10px;border-radius:var(--radius-sm);border:1px solid var(--line);font-family:inherit;font-size:13px;background:var(--card);color:var(--ink);}
+
+/* Base .btn-success — referenced by the tracking modal's delivery-schedule
+   form but never actually defined; give it a real look. */
+.btn-success{background:var(--success);color:#fff;border:none;padding:11px 15px;border-radius:var(--radius-sm);font-weight:600;font-size:14px;}
+.btn-success:hover{filter:brightness(1.12);}
+
+/* The FPO dashboard's 4-cell stat strip wraps gracefully on narrow screens
+   (the farmer/consumer 2-3 cell strips keep their single row). */
+@media (max-width:900px){
+  .stat-strip{flex-wrap:wrap;}
+  .stat-cell{flex:1 1 50%;border-bottom:1px solid var(--line);}
+}
+
 @media (prefers-reduced-motion:reduce){
   html,body{scroll-behavior:auto;}
   *,*::before,*::after{scroll-behavior:auto !important;transition-duration:.01ms !important;animation-duration:.01ms !important;}

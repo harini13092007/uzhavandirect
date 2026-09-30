@@ -36,9 +36,13 @@
   <div class="auth-panel">
     <div class="auth-card">
 
+      <!-- ROLE SELECTOR: Farmer / Consumer / FPO Manager.
+           setAuthRole() in app.js highlights the picked role and the login
+           form validates the account type against it. -->
       <div class="role-switch">
         <button class="role-btn active" data-role="farmer" id="roleFarmerBtn">🧑‍🌾 Farmer</button>
         <button class="role-btn" data-role="consumer" id="roleConsumerBtn">🛒 Consumer</button>
+        <button class="role-btn" data-role="fpo" id="roleFpoBtn">🏢 FPO</button>
       </div>
 
       <div class="auth-tabs">
@@ -55,7 +59,7 @@
           <input type="password" id="loginPass" placeholder="Enter password" required>
         </label>
         <button type="submit" class="btn-primary">Log in as <span class="roleLabelInline">Farmer</span></button>
-        <p class="auth-hint">Demo login — select Farmer or Consumer, then use <b>john</b> / <b>123</b>.</p>
+        <p class="auth-hint">Demo login — select Farmer, Consumer or FPO, then use <b>john</b> / <b>123</b>.</p>
       </form>
 
       <!-- SIGNUP FORM (Sign-up + demo OTP verification) -->

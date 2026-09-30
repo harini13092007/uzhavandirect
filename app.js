@@ -20,7 +20,8 @@ const I18N = {
       brandName:"Uzhavan Direct",brandTagline:"From the field to your home, with fair prices and no middlemen.",
       appearance:"Appearance",brightMode:"Bright",darkMode:"Dark",language:"Language",
       colorTheme:"Color theme",choosePalette:"Choose a palette for the app.",loginReturn:"Return to login",
-      chooseTheme:"Choose a color theme",themeHarvest:"Harvest",themeEmerald:"Emerald",themeTeal:"Teal"},
+      chooseTheme:"Choose a color theme",themeHarvest:"Harvest",themeEmerald:"Emerald",themeTeal:"Teal",
+      fpoTier1:"First-Mile Aggregation",fpoTier2:"Corridor Batching",fpoTier3:"Hub Dispatch",fpoPortal:"FPO Portal"},
     ta:{dashboard:"முகப்புப் பலகை",sellItem:"விளைபொருள் விற்பனை",bidding:"ஏலம்",demand:"சந்தைத் தேவை",
       aiChat:"AI விவசாய ஆலோசகர்",settings:"விருப்பங்கள்",itemsOrdered:"வாங்கிய பொருட்கள்",cart:"கூடை",
       history:"வாங்கிய பொருட்களின் வரலாறு",farmerProfile:"விவசாயி விவரம்",following:"நீங்கள் பின்தொடரும் விவசாயிகள்",moneyDetails:"வரவு செலவு விவரங்கள்",
@@ -30,7 +31,8 @@ const I18N = {
       brandName:"உழவர் சந்தை",brandTagline:"வயலிலிருந்து உங்கள் இல்லத்திற்கு; இடைத்தரகர் இன்றி, உழவருக்கு நியாயமான விலை.",
       appearance:"காட்சி அமைப்பு",brightMode:"ஒளிமுறை",darkMode:"இருள்முறை",language:"மொழி",
       colorTheme:"வண்ணத் தோற்றம்",choosePalette:"பயன்பாட்டின் வண்ணங்களைத் தேர்ந்தெடுக்கவும்.",loginReturn:"உள்நுழைவுக்குத் திரும்பு",
-      chooseTheme:"வண்ணத் தோற்றத்தைத் தேர்ந்தெடுக்கவும்",themeHarvest:"அறுவடை",themeEmerald:"மரகதம்",themeTeal:"டீல்"},
+      chooseTheme:"வண்ணத் தோற்றத்தைத் தேர்ந்தெடுக்கவும்",themeHarvest:"அறுவடை",themeEmerald:"மரகதம்",themeTeal:"டீல்",
+      fpoTier1:"முதல் மைல் ஒருங்கிணைப்பு",fpoTier2:"வழித்தட ஒருங்கிணைப்பு",fpoTier3:"விநியோக மைய அனுப்புதல்",fpoPortal:"FPO இணையம்"},
     hi:{dashboard:"मुख्य पटल",sellItem:"उपज बेचें",bidding:"नीलामी",demand:"बाज़ार की मांग",
       aiChat:"खेती सलाहकार",settings:"प्राथमिकताएँ",itemsOrdered:"खरीदे गए सामान",cart:"टोकरी",
       history:"खरीद का इतिहास",farmerProfile:"किसान परिचय",following:"आप जिन किसानों से जुड़े हैं",moneyDetails:"आय-व्यय विवरण",
@@ -40,7 +42,8 @@ const I18N = {
       brandName:"किसान मंडी",brandTagline:"खेत से आपके घर तक; बिना बिचौलियों के, किसान को उचित दाम।",
       appearance:"दिखावट",brightMode:"उजला रूप",darkMode:"गहरा रूप",language:"भाषा",
       colorTheme:"रंग रूप",choosePalette:"ऐप के लिए रंग चुनें।",loginReturn:"लॉग इन पर लौटें",
-      chooseTheme:"रंग थीम चुनें",themeHarvest:"फ़सल",themeEmerald:"पन्ना",themeTeal:"टील"}
+      chooseTheme:"रंग थीम चुनें",themeHarvest:"फ़सल",themeEmerald:"पन्ना",themeTeal:"टील",
+      fpoTier1:"प्रथम-मील संग्रह",fpoTier2:"कॉरिडोर बैचिंग",fpoTier3:"हब डिस्पैच",fpoPortal:"FPO पोर्टल"}
 };
 let lang = localStorage.getItem('ud_lang') || 'en';
 function t(key){ return (I18N[lang] && I18N[lang][key]) || I18N.en[key] || key; }
@@ -355,7 +358,12 @@ const store = {
   // Rating ledger: one entry per consumer→farmer rating (a consumer
   // re-rating the same farmer updates their existing entry, see recordRating()).
   ratings(){ return this.get('ud_ratings') || []; },
-  saveRatings(r){ this.set('ud_ratings', r); }
+  saveRatings(r){ this.set('ud_ratings', r); },
+  // FPO corridor batches / shipments (see FPO PORTAL section below):
+  // {id, fpo, sourceCluster, destinationHub, corridor, vehicle,
+  //  orderIds, status: assembling|dispatched|received, ...timestamps}
+  fpoBatches(){ return this.get('ud_fpo_batches') || []; },
+  saveFpoBatches(b){ this.set('ud_fpo_batches', b); }
 };
 ensureConsumerProfileFields();
 
@@ -370,6 +378,73 @@ function ensureDemoCredentials(){
   localStorage.setItem('ud_demo_credentials_v2','1');
 }
 ensureDemoCredentials();
+
+/* ===============================
+   FPO PORTAL — DEMO DATA MIGRATION
+   Non-destructive upgrade for existing demo sessions:
+     1. Adds the demo FPO manager account (thanjai_fpo) if missing.
+     2. Creates the ud_fpo_batches shipment ledger.
+     3. Seeds a small FPO pipeline (orders at each tier + one corridor
+        batch) so all three tiers are clickable on the very first visit.
+   Guarded by 'ud_fpo_v1' so it runs exactly once — and unlike a seed()
+   version bump it never wipes data a tester already created.
+   =============================== */
+function ensureFpoPortalData(){
+  const users = store.users() || {};
+  if (!users.thanjai_fpo){
+    users.thanjai_fpo = {type:'fpo',name:'Thanjavur Agri Cluster FPO',phone:'9000009000',password:'123',
+      village:'Thanjavur, TN',
+      bio:'Farmer Producer Organisation — aggregates from the Nilgiris belt and ships consolidated loads to the Thanjavur hub.',
+      cluster:'Nilgiris cluster',hub:'Thanjavur hub',followers:[],donations:[],notifications:[]};
+    store.saveUsers(users);
+  }
+  if (!store.get('ud_fpo_batches')) store.saveFpoBatches([]);
+  if (store.get('ud_fpo_v1')) return;
+
+  const consumerDivya = Object.values(users).find(u=>u.type==='consumer' && u.name==='Divya Sundar');
+  const consumerName = consumerDivya ? 'Divya Sundar' : (Object.values(users).find(u=>u.type==='consumer')?.name || 'Demo Consumer');
+  const now = Date.now();
+  const iso = daysAgo => new Date(now - daysAgo*86400000).toISOString();
+  const address = '14 Anna Nagar, Chennai';
+
+  // One order per workflow state the FPO portal needs:
+  //   fd1/fd2 → arrived at the farm-gate collection point, awaiting AGMARK grading (Tier-1)
+  //   fd4    → packed by the farmer, still en route to the collection point
+  //   fd3    → already graded + batched + dispatched, sitting at the destination
+  //            hub with the consumer's chosen slot, awaiting EV assignment (Tier-3)
+  const demoOrders = [
+    {id:'fd1',farmer:'karthik_farms',consumer:consumerName,productId:'p2',item:'Tomato',qty:20,unit:'kg',price:560,
+      city:'Chennai',address,status:'pending',date:new Date(now).toISOString().slice(0,10),deliveryStage:'atFarmerCity'},
+    {id:'fd2',farmer:'meena_agro',consumer:consumerName,productId:'p6',item:'Carrot',qty:30,unit:'kg',price:900,
+      city:'Chennai',address,status:'pending',date:new Date(now).toISOString().slice(0,10),deliveryStage:'atFarmerCity'},
+    {id:'fd4',farmer:'meena_agro',consumer:consumerName,productId:'p13',item:'Eggs',qty:5,unit:'dozen',price:450,
+      city:'Chennai',address,status:'pending',date:new Date(now).toISOString().slice(0,10),deliveryStage:'packed'},
+    {id:'fd3',farmer:'karthik_farms',consumer:consumerName,productId:'p1',item:'Rice',qty:500,unit:'kg',price:21000,
+      city:'Chennai',address,status:'pending',date:iso(3),deliveryStage:'atFpo',
+      // Tier-1/Tier-2 history for this one is already written:
+      fpo:'thanjai_fpo',fpoGrade:'A',fpoWeighKg:500,fpoGradedAt:iso(2),
+      fpoBatchId:'fb1',fpoCorridor:'Nilgiris → Thanjavur',fpoVehicle:'truck',fpoDispatchedAt:iso(1),
+      // Consumer already picked a slot from the tracking modal (Tier-3 shows this):
+      fpoDeliveryTiming:{type:'morning',value:'',label:'Morning (8:00 AM–11:00 AM)'}}
+  ];
+  const orders = store.orders() || [];
+  const existingIds = new Set(orders.map(o=>o.id));
+  demoOrders.forEach(o=>{ if (!existingIds.has(o.id)) orders.push(o); });
+  store.saveOrders(orders);
+
+  // The seeded corridor shipment carrying fd3 — status 'dispatched' means
+  // it's waiting in Tier-3's "Incoming shipments" queue to be received.
+  const batches = store.fpoBatches();
+  if (!batches.some(b=>b.id==='fb1')){
+    batches.push({id:'fb1',fpo:'thanjai_fpo',sourceCluster:'Nilgiris cluster',destinationHub:'Thanjavur hub',
+      corridor:'Nilgiris → Thanjavur',vehicle:'truck',orderIds:['fd3'],
+      status:'dispatched',createdAt:iso(2),dispatchedAt:iso(1)});
+    store.saveFpoBatches(batches);
+  }
+
+  store.set('ud_fpo_v1', '1');
+}
+ensureFpoPortalData();
 
 /* ---------- Toast ---------- */
 function toast(msg){
@@ -548,18 +623,24 @@ function markNotifRead(id){
    against ud_users. Sign-up also
    runs through the demo OTP step
    below before an account is created.
-   =============================== */
-const authScreen = document.getElementById('authScreen');
+   =============================== */const authScreen = document.getElementById('authScreen');
 const appShell = document.getElementById('appShell');
-const DEMO_LOGIN_USERS = {farmer:'karthik_farms',consumer:'divya_buys'};
+// Demo account each role lands on when logging in as "john" / "123".
+// thanjai_fpo is created by ensureFpoPortalData() further down.
+const DEMO_LOGIN_USERS = {farmer:'karthik_farms',consumer:'divya_buys',fpo:'thanjai_fpo'};
+const ROLE_LABELS = {farmer:'Farmer',consumer:'Consumer',fpo:'FPO'};
 
-document.getElementById('roleFarmerBtn').onclick = ()=> setAuthRole('farmer');
-document.getElementById('roleConsumerBtn').onclick = ()=> setAuthRole('consumer');
+const AUTH_ROLE_BUTTONS = {farmer:'roleFarmerBtn',consumer:'roleConsumerBtn',fpo:'roleFpoBtn'};
+Object.values(AUTH_ROLE_BUTTONS).forEach(buttonId=>{
+  const button = document.getElementById(buttonId);
+  if (button) button.onclick = ()=> setAuthRole(button.dataset.role);
+});
 function setAuthRole(role){
   selectedRole = role;
-  document.getElementById('roleFarmerBtn').classList.toggle('active', role==='farmer');
-  document.getElementById('roleConsumerBtn').classList.toggle('active', role==='consumer');
-  document.querySelectorAll('.roleLabelInline').forEach(el=> el.textContent = role==='farmer'?'Farmer':'Consumer');
+  Object.entries(AUTH_ROLE_BUTTONS).forEach(([roleName,buttonId])=>{
+    document.getElementById(buttonId)?.classList.toggle('active', role===roleName);
+  });
+  document.querySelectorAll('.roleLabelInline').forEach(el=> el.textContent = ROLE_LABELS[role]);
 }
 
 document.querySelectorAll('.auth-tab').forEach(tab=>{
@@ -624,6 +705,10 @@ document.getElementById('signupForm').addEventListener('submit', e=>{
   const users = store.users();
   users[uname] = selectedRole==='farmer'
     ? {type:"farmer",name,phone,password:pass,village:"Not set",bio:"",followers:[],donations:[]}
+    : selectedRole==='fpo'
+    // FPO managers get a source cluster + destination hub, which drive the
+    // Tier-2 corridor batching defaults (see FPO PORTAL section).
+    ? {type:"fpo",name,phone,password:pass,village:"Not set",bio:"",cluster:"New cluster",hub:"New hub",followers:[],donations:[],notifications:[]}
     : {type:"consumer",name,phone,password:pass,address:"",following:[]};
   store.saveUsers(users);
   if (selectedRole==='consumer') store.saveCart(uname, []);
@@ -717,6 +802,15 @@ const CONSUMER_NAV = [
   {id:'search', key:'search'},
   {id:'history', key:'history'}
 ];
+// FPO MANAGER PORTAL: the three sidebar entries map 1:1 to the three
+// logistics tiers — Tier-1 farm-gate collection, Tier-2 corridor batching,
+// Tier-3 destination-hub dispatch (see the FPO PORTAL section below).
+const FPO_NAV = [
+  {id:'dashboard', key:'dashboard'},
+  {id:'fpoCollect', key:'fpoTier1'},
+  {id:'fpoCorridors', key:'fpoTier2'},
+  {id:'fpoHub', key:'fpoTier3'}
+];
 
 let currentView = 'dashboard';
 // FARMER PROFILE (consumer-facing): which farmer's profile is currently
@@ -725,7 +819,7 @@ let viewingFarmerId = null;
 let cameFromView = 'nearby';
 
 function renderNav(){
-  const nav = currentRole==='farmer' ? FARMER_NAV : CONSUMER_NAV;
+  const nav = currentRole==='farmer' ? FARMER_NAV : currentRole==='fpo' ? FPO_NAV : CONSUMER_NAV;
   const el = document.getElementById('sideNav');
   el.innerHTML = '';
   nav.forEach(item=>{
@@ -774,7 +868,7 @@ const EXTRA_VIEW_TITLES = {profile:'profile', settings:'settings', farmerProfile
 
 function renderView(viewId){
   document.getElementById('viewTitle').textContent =
-    t(FARMER_NAV.concat(CONSUMER_NAV).find(n=>n.id===viewId)?.key || EXTRA_VIEW_TITLES[viewId] || viewId);
+    t(FARMER_NAV.concat(CONSUMER_NAV, FPO_NAV).find(n=>n.id===viewId)?.key || EXTRA_VIEW_TITLES[viewId] || viewId);
   const root = document.getElementById('viewRoot');
   root.innerHTML = '';
   if (currentRole==='farmer'){
@@ -782,6 +876,13 @@ function renderView(viewId){
       demand:renderDemand, chat:renderChat, profile:renderFarmerProfile, settings:renderFarmerSettings,
       pending:renderPendingOrders, completed:renderCompletedOrders, moneyTable:renderMoneyTable};
     (map[viewId]||renderFarmerDashboard)(root);
+  } else if (currentRole==='fpo'){
+    // FPO MANAGER PORTAL: dashboard + the three logistics tiers, plus a
+    // settings/profile pair so the topbar shortcuts work for this role too.
+    const map = {dashboard:renderFpoDashboard, fpoCollect:renderFpoCollection,
+      fpoCorridors:renderFpoCorridors, fpoHub:renderFpoHub,
+      settings:renderFpoSettings, profile:renderFpoProfile};
+    (map[viewId]||renderFpoDashboard)(root);
   } else {
     const map = {dashboard:renderConsumerDashboard, nearby:renderNearby, bidding:renderConsumerBidding,
       search:renderSearch, itemsOrdered:renderItemsOrdered,
@@ -937,6 +1038,25 @@ function distanceBetweenCitiesKm(fromCity,toCity){
   const a = Math.sin(latDelta/2)**2 + Math.cos(radians(from.lat))*Math.cos(radians(to.lat))*Math.sin(lonDelta/2)**2;
   return 6371*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
 }
+// Single choke-point for delivery-stage writes. Every stage change in the
+// app — farmer's advance button, tracking modal, and all three FPO tiers —
+// goes through here so that:
+//   1. the stage is persisted once, in one shape, and
+//   2. an 'ud-stage-changed' event fires, which an open tracking modal
+//      listens to (see openTrackingModal) so the consumer's timeline and
+//      Leaflet map refresh the moment an FPO/farmer acts.
+function setOrderStage(orderId, stage, extraFields){
+  const orders = store.orders();
+  const o = orders.find(x=>x.id===orderId);
+  if (!o) return null;
+  o.deliveryStage = stage;
+  if (stage === 'delivered') o.status = 'completed';
+  // Optional co-writes (e.g. fpoDispatchedAt when a corridor batch ships).
+  if (extraFields) Object.assign(o, extraFields);
+  store.saveOrders(orders);
+  window.dispatchEvent(new CustomEvent('ud-stage-changed', {detail:{orderId, stage}}));
+  return o;
+}
 // Moves an order one step forward through DELIVERY_STAGES. Reaching
 // "delivered" also marks the order status "completed" so it's counted
 // in Money Received / Orders Completed, same as before tracking existed.
@@ -950,10 +1070,9 @@ function advanceOrderStage(orderId){
   }
   const idx = DELIVERY_STAGES.indexOf(getOrderStage(o));
   const next = DELIVERY_STAGES[Math.min(idx+1, DELIVERY_STAGES.length-1)];
-  o.deliveryStage = next;
-  if (next === 'delivered') o.status = 'completed';
-  store.saveOrders(orders);
-  toast(`📦 Order ${orderDisplayId(o)} → ${deliveryStageLabel(o,next)}`);
+  const updated = setOrderStage(orderId, next);
+  if (!updated) return;
+  toast(`📦 Order ${orderDisplayId(updated)} → ${deliveryStageLabel(updated,next)}`);
   renderView(currentView);
 }
 // Builds and shows the Amazon-style vertical delivery timeline for one
@@ -1018,7 +1137,10 @@ function openTrackingModal(orderId){
     </div>
   </div>`;
   document.body.appendChild(overlay);
-  overlay.querySelector('#closeTracking').onclick = ()=> overlay.remove();
+  // Closing must also detach the live stage listener registered at the bottom
+  // of this function (onStageChanged), otherwise a closed modal would keep
+  // reacting to later FPO/farmer actions.
+  overlay.querySelector('#closeTracking').onclick = ()=> closeTrackingModal();
 
   const timeline = overlay.querySelector('#dynamic-tracking-timeline');
   const advanceButton = overlay.querySelector('#btnSimulateStep');
@@ -1252,6 +1374,33 @@ function openTrackingModal(orderId){
     }
   }
 
+  // ===================== LIVE STAGE SYNC =====================
+  // setOrderStage() (used by the farmer's advance button AND every FPO tier
+  // action) fires 'ud-stage-changed'. If this modal happens to be open for
+  // that order, re-read it and repaint the timeline + jump the Leaflet map to
+  // the new stop — so the consumer's tracking updates instantly, live.
+  function onStageChanged(event){
+    if (event.detail?.orderId !== orderId) return;
+    const fresh = store.orders().find(x=>x.id===orderId);
+    if (!fresh) return;
+    Object.assign(o, fresh);
+    currentRouteStage = Math.max(0, DELIVERY_STAGES.indexOf(getOrderStage(o)));
+    renderTrackingProgress();
+    const stageName = DELIVERY_STAGES[currentRouteStage];
+    const stopIndex = stageName==='atFarmerCity' ? 1 : stageName==='atCustomerCity' ? 2
+      : stageName==='atFpo' ? 3 : stageName==='outForDelivery' || stageName==='delivered' ? 4 : 0;
+    const stop = routeStops[stopIndex];
+    if (stop && map){
+      map.panTo([stop.lat, stop.lon]);
+      routeCoordinates.forEach((point,index)=> point.marker.setOpacity(index===stopIndex ? 1 : .65));
+    }
+  }
+  function closeTrackingModal(){
+    window.removeEventListener('ud-stage-changed', onStageChanged);
+    overlay.remove();
+  }
+  window.addEventListener('ud-stage-changed', onStageChanged);
+
   renderTrackingProgress();
   initializeRoadRoute();
 }
@@ -1292,6 +1441,8 @@ function updateOrderStatus(id,status){
   const o = orders.find(x=>x.id===id);
   o.status = status;
   store.saveOrders(orders);
+  // Let any open tracking modal re-read the order (status feeds its state too).
+  window.dispatchEvent(new CustomEvent('ud-stage-changed', {detail:{orderId:id, stage:getOrderStage(o)}}));
   toast(status==='completed' ? "✅ Order marked delivered" : "💸 Refund issued to consumer");
   renderView(currentView);
 }
@@ -1851,6 +2002,528 @@ function renderFarmerSettings(root){
     users[currentUser].bio = document.getElementById('editBio').value;
     store.saveUsers(users);
     toast("✅ Profile updated");
+  };
+}
+
+/* ======================================================================= *
+ *  FPO MANAGER PORTAL (Farmer Producer Organisation)
+ *  Three logistics tiers layered on the shared order/deliveryStage model:
+ *
+ *    Tier 1 — First-mile collection: digital weighment + AGMARK grading of
+ *             produce arriving at village farm-gate collection points.
+ *    Tier 2 — Corridor batching: LTL consolidation of graded orders into
+ *             3-T shared trucks / Kisan Rail parcel vans, then dispatch to
+ *             the destination hub (advances every batched order to 'atFpo').
+ *    Tier 3 — Destination hub: receive & de-batch corridor shipments, show
+ *             the delivery slots consumers picked, assign EV doorstep agents
+ *             (advances the order to 'outForDelivery').
+ *
+ *  Every stage write goes through setOrderStage(), so the consumer's
+ *  tracking timeline + Leaflet map update live (see openTrackingModal).
+ * ======================================================================= */
+
+/* ---------- FPO config / lookups ---------- */
+const AGMARK_GRADES = [
+  {id:'A', label:'Grade A (Premium)', short:'Premium'},
+  {id:'B', label:'Grade B (Standard)', short:'Standard'},
+  {id:'C', label:'Grade C (Processing)', short:'Processing'}
+];
+// Preset first-mile → destination freight corridors (Tamil Nadu demo routes).
+const FPO_CORRIDORS = ['Nilgiris → Thanjavur','Salem → Chennai','Erode → Coimbatore','Trichy → Madurai'];
+// Shared freight options + payload ceilings that drive the LTL capacity meter.
+const FPO_VEHICLES = {
+  truck:{label:'3-Tonne shared truck', capacityKg:3000},
+  rail:{label:'Kisan Rail parcel van', capacityKg:5000}
+};
+// Demo EV doorstep agents assigned during Tier-3 last-mile dispatch.
+const FPO_EV_AGENTS = ['Kumar · EV-01','Anitha · EV-02','Selvam · EV-03'];
+
+function fpoMyBatches(){ return store.fpoBatches().filter(b=>b.fpo===currentUser); }
+function fpoOrderById(id){ return store.orders().find(o=>o.id===id); }
+// Tier-1: orders that have arrived at a farm-gate collection point
+// (stage atFarmerCity) and haven't been graded yet — these are the
+// "pending Tier-1 aggregations" shown on the FPO dashboard.
+function fpoAwaitingGrade(){ return store.orders().filter(o=> getOrderStage(o)==='atFarmerCity' && !o.fpoGrade); }
+// Orders still travelling to the collection point (shown read-only as "en route").
+function fpoEnRoute(){ return store.orders().filter(o=> getOrderStage(o)==='packed'); }
+// Tier-2 queue: graded by this FPO, not yet batched, still sitting at the origin.
+function fpoBatchQueue(){
+  return store.orders().filter(o=> o.fpo===currentUser && o.fpoGrade && !o.fpoBatchId && getOrderStage(o)==='atFarmerCity');
+}
+// Tier-3: orders sitting at the destination hub waiting for an EV agent.
+function fpoHubQueue(){ return store.orders().filter(o=> o.fpo===currentUser && getOrderStage(o)==='atFpo'); }
+// Everything this FPO has handed to an EV agent (out for delivery / delivered).
+function fpoDispatched(){ return store.orders().filter(o=> o.fpo===currentUser && o.fpoEvAgent); }
+function fpoBatchWeightKg(batch){
+  const orders = store.orders();
+  return batch.orderIds.reduce((sum,id)=> sum + Number(orders.find(o=>o.id===id)?.fpoWeighKg || 0), 0);
+}
+// Corridor helpers: 'Nilgiris → Thanjavur' ⇒ source 'Nilgiris cluster',
+// destination 'Thanjavur hub'.
+function fpoSourceForCorridor(corridor){ return corridor.split('→')[0].trim() + ' cluster'; }
+function fpoHubForCorridor(corridor){ return corridor.split('→').pop().trim() + ' hub'; }
+function fpoBatchStatusLabel(status){
+  return status==='assembling' ? 'Assembling' : status==='dispatched' ? 'In transit' : 'Received at hub';
+}
+// Push an alert onto the consumer's notification bell (same ledger the
+// donation alerts use) so FPO actions are visible to the buyer too.
+function notifyOrderConsumer(order, message){
+  const users = store.users();
+  const uname = Object.keys(users).find(k=> users[k].type==='consumer' && users[k].name===order.consumer);
+  if (!uname) return;
+  users[uname].notifications = users[uname].notifications || [];
+  users[uname].notifications.push({id:'notif_'+Date.now(), type:'fpo', message, read:false, date:new Date().toISOString()});
+  store.saveUsers(users);
+  refreshNotifBadge();
+}
+
+/* ---------- Tier-1 action: digital weighment + AGMARK grading ---------- */
+function confirmFpoGrade(orderId){
+  const order = fpoOrderById(orderId);
+  if (!order || order.fpoGrade) return;
+  const weighInput = document.querySelector(`[data-weigh="${orderId}"]`);
+  const gradeBtn = document.querySelector(`.grade-btn.selected[data-grade-order="${orderId}"]`);
+  if (!gradeBtn){ toast('⚠️ Pick an AGMARK grade first'); return; }
+  const weighKg = Number(weighInput?.value || order.qty);
+  if (!weighKg || weighKg <= 0){ toast('⚠️ Enter the digital weighment in kg'); return; }
+  const orders = store.orders();
+  const live = orders.find(o=>o.id===orderId);
+  live.fpo = currentUser;            // claim the lot for this FPO
+  live.fpoGrade = gradeBtn.dataset.gradeVal;
+  live.fpoWeighKg = weighKg;
+  live.fpoGradedAt = new Date().toISOString();
+  store.saveOrders(orders);
+  notifyOrderConsumer(live, `${live.item} (${weighKg} kg) graded ${live.fpoGrade} at the farm gate.`);
+  toast(`✅ ${live.item} graded ${live.fpoGrade} · ${weighKg} kg → batching queue`);
+  renderView(currentView);
+}
+
+/* ---------- Tier-2 actions: LTL corridor batching + dispatch ---------- */
+function createFpoBatch(){
+  const selected = [...document.querySelectorAll('.fpo-queue-check:checked')].map(el=>el.value);
+  if (!selected.length){ toast('⚠️ Select graded orders to aggregate'); return; }
+  const corridor = document.getElementById('fpoCorridorSelect').value;
+  const vehicleKey = document.getElementById('fpoVehicleSelect').value;
+  const vehicle = FPO_VEHICLES[vehicleKey];
+  const orders = store.orders();
+  const weightKg = selected.reduce((sum,id)=> sum + Number(orders.find(o=>o.id===id)?.fpoWeighKg || 0), 0);
+  if (weightKg > vehicle.capacityKg){
+    toast(`⚠️ ${weightKg} kg exceeds ${vehicle.label} capacity (${vehicle.capacityKg} kg)`);
+    return;
+  }
+  const batchId = 'fb' + Date.now();
+  const batches = store.fpoBatches();
+  batches.push({id:batchId, fpo:currentUser, sourceCluster:fpoSourceForCorridor(corridor),
+    destinationHub:fpoHubForCorridor(corridor), corridor, vehicle:vehicleKey,
+    orderIds:selected, weightKg, status:'assembling', createdAt:new Date().toISOString()});
+  store.saveFpoBatches(batches);
+  // Stamp the member orders so Tier-3 (and the consumer) can trace the lot.
+  selected.forEach(orderId=>{
+    const o = orders.find(x=>x.id===orderId);
+    if (o){ o.fpoBatchId = batchId; o.fpoCorridor = corridor; o.fpoVehicle = vehicleKey; }
+  });
+  store.saveOrders(orders);
+  toast(`🚛 Batch assembled · ${weightKg} kg on the ${corridor} corridor`);
+  renderView(currentView);
+}
+
+function dispatchFpoBatch(batchId){
+  const batches = store.fpoBatches();
+  const batch = batches.find(b=>b.id===batchId && b.fpo===currentUser);
+  if (!batch || batch.status!=='assembling') return;
+  batch.status = 'dispatched';
+  batch.dispatchedAt = new Date().toISOString();
+  store.saveFpoBatches(batches);
+  // SPEC: dispatch advances ALL aggregated orders to the destination hub
+  // (atFpo). setOrderStage jumps over atCustomerCity — on arrival the goods
+  // are both "in the destination city" and "at the hub office" — and fires
+  // the live-sync event for any open tracking modal.
+  batch.orderIds.forEach(orderId=>{
+    const o = setOrderStage(orderId, 'atFpo', {fpoDispatchedAt: batch.dispatchedAt});
+    if (o) notifyOrderConsumer(o, `Shipped on the ${batch.corridor} corridor → ${batch.destinationHub}. Pick a delivery slot in tracking.`);
+  });
+  toast(`🚚 Batch dispatched → ${batch.destinationHub}`);
+  renderView(currentView);
+}
+
+/* ---------- Tier-3 actions: hub receive + EV last-mile dispatch ---------- */
+function receiveFpoBatch(batchId){
+  const batches = store.fpoBatches();
+  const batch = batches.find(b=>b.id===batchId && b.fpo===currentUser);
+  if (!batch || batch.status!=='dispatched') return;
+  batch.status = 'received';
+  // de-batched at the destination hub
+  batch.receivedAt = new Date().toISOString();
+  store.saveFpoBatches(batches);
+  toast(`📥 ${batch.corridor} shipment received & de-batched at ${batch.destinationHub}`);
+  renderView(currentView);
+}
+
+function assignFpoEvAgent(orderId){
+  const select = document.querySelector(`[data-ev-agent="${orderId}"]`);
+  const agent = select?.value;
+  if (!agent){ toast('⚠️ Choose an EV doorstep agent'); return; }
+  const order = fpoOrderById(orderId);
+  if (!order) return;
+  // Orders that arrived via a corridor can only go out once their batch has
+  // been received (de-batched) above — keeps the tier flow honest.
+  if (order.fpoBatchId){
+    const batch = store.fpoBatches().find(b=>b.id===order.fpoBatchId);
+    if (batch && batch.status!=='received'){ toast('⚠️ Receive the corridor shipment first'); return; }
+  }
+  const orders = store.orders();
+  const live = orders.find(o=>o.id===orderId);
+  live.fpoEvAgent = agent;
+  live.fpoEvAssignedAt = new Date().toISOString();
+  store.saveOrders(orders);
+  setOrderStage(orderId, 'outForDelivery');
+  // global stage write + live event
+  notifyOrderConsumer(live, `${agent} picked up your order — out for delivery.`);
+  toast(`🛵 ${agent} assigned → out for delivery`);
+  renderView(currentView);
+}
+
+/* ======================================================================= *
+ *  FPO VIEWS
+ * ======================================================================= */
+
+// DASHBOARD: four headline stats (Tier-1 backlog, tonnage, live corridors,
+// hub queue), a three-tier pipeline summary, and the latest batch activity.
+function renderFpoDashboard(root){
+  const awaiting = fpoAwaitingGrade();
+  const queue = fpoBatchQueue();
+  const batches = fpoMyBatches();
+  const incoming = batches.filter(b=>b.status==='dispatched');
+  const corridors = new Set(incoming.map(b=>b.corridor)).size;
+  const hubQueue = fpoHubQueue();
+  const tonnes = batches.reduce((s,b)=> s + fpoBatchWeightKg(b), 0) / 1000;
+  const me = getUser(currentUser);
+
+  root.innerHTML = `
+    <div class="stat-strip">
+      <button class="stat-cell" id="fpoStatTier1" type="button"><span class="stat-num">${awaiting.length}</span><span class="stat-label">Pending Tier-1 aggregations</span></button>
+      <button class="stat-cell" id="fpoStatWeight" type="button"><span class="stat-num">${tonnes.toFixed(2)} T</span><span class="stat-label">Total batch weight (tonnes)</span></button>
+      <button class="stat-cell" id="fpoStatCorridors" type="button"><span class="stat-num">${corridors}</span><span class="stat-label">Active transit corridors</span></button>
+      <button class="stat-cell" id="fpoStatHub" type="button"><span class="stat-num">${hubQueue.length}</span><span class="stat-label">Hub delivery queue</span></button>
+    </div>
+    <div class="section-head"><h3>🚚 ${me.name}</h3><span class="muted">${me.cluster||'—'} → ${me.hub||'—'}</span></div>
+    <div class="fpo-tier-grid">
+      <div class="fpo-tier-card">
+        <div class="fpo-tier-step">Tier 1 · Farm gate</div>
+        <h4>${t('fpoTier1')}</h4>
+        <p>Weigh and AGMARK-grade produce arriving from village collection points.</p>
+        <div class="fpo-tier-count">${awaiting.length} awaiting grading · ${queue.length} queued</div>
+        <button class="pill-btn" data-open="fpoCollect">Open module →</button>
+      </div>
+      <div class="fpo-tier-card">
+        <div class="fpo-tier-step">Tier 2 · Freight corridor</div>
+        <h4>${t('fpoTier2')}</h4>
+        <p>Consolidate graded lots into shared 3-T trucks or Kisan Rail vans.</p>
+        <div class="fpo-tier-count">${queue.length} lots to batch · ${batches.filter(b=>b.status==='assembling').length} assembling</div>
+        <button class="pill-btn" data-open="fpoCorridors">Open module →</button>
+      </div>
+      <div class="fpo-tier-card">
+        <div class="fpo-tier-step">Tier 3 · Destination hub</div>
+        <h4>${t('fpoTier3')}</h4>
+        <p>Receive corridor shipments and assign EV agents for doorstep delivery.</p>
+        <div class="fpo-tier-count">${incoming.length} incoming · ${hubQueue.length} awaiting EV</div>
+        <button class="pill-btn" data-open="fpoHub">Open module →</button>
+      </div>
+    </div>
+    <div class="section-head" style="margin-top:24px;"><h3>Corridor shipment activity</h3><span class="muted">${batches.length} batch${batches.length===1?'':'es'}</span></div>
+    <div class="card" id="fpoDashBatches"></div>
+  `;
+
+  document.getElementById('fpoStatTier1').onclick = ()=> goTo('fpoCollect');
+  document.getElementById('fpoStatWeight').onclick = ()=> goTo('fpoCorridors');
+  document.getElementById('fpoStatCorridors').onclick = ()=> goTo('fpoCorridors');
+  document.getElementById('fpoStatHub').onclick = ()=> goTo('fpoHub');
+  root.querySelectorAll('[data-open]').forEach(btn=> btn.onclick = ()=> goTo(btn.dataset.open));
+
+  const list = document.getElementById('fpoDashBatches');
+  if (!batches.length){
+    list.innerHTML = `<div class="empty-state"><div class="glyph">🚛</div>No corridor batches yet. Grade produce in Tier-1, then assemble a batch in Tier-2.</div>`;
+  } else {
+    list.innerHTML = batches.slice().reverse().map(b=>`
+      <div class="order-row">
+        <div>
+          <div class="order-item-name">${b.corridor} <span class="status-chip ${b.status}">${fpoBatchStatusLabel(b.status)}</span></div>
+          <div class="order-sub">${FPO_VEHICLES[b.vehicle]?.label || b.vehicle} · ${fpoBatchWeightKg(b)} kg · ${b.orderIds.length} order${b.orderIds.length===1?'':'s'} · → ${b.destinationHub}</div>
+        </div>
+        <span class="order-sub">${new Date(b.dispatchedAt || b.createdAt).toLocaleDateString()}</span>
+      </div>`).join('');
+  }
+}
+
+// TIER 1 — first-mile collection table: digital weighment input + AGMARK
+// grade picker per row; "Confirm grading" claims the lot and pushes it into
+// the Tier-2 batching queue. En-route (packed) lots show read-only.
+function renderFpoCollection(root){
+  const awaiting = fpoAwaitingGrade();
+  const enRoute = fpoEnRoute();
+  const graded = store.orders()
+    .filter(o=>o.fpo===currentUser && o.fpoGrade)
+    .sort((a,b)=> String(b.fpoGradedAt||'').localeCompare(String(a.fpoGradedAt||'')));
+
+  const gradeRows = awaiting.map(o=>{
+    const farmer = getUser(o.farmer);
+    return `<tr>
+      <td><strong>${orderDisplayId(o)}</strong></td>
+      <td>${farmer?.name || o.farmer}<div class="order-sub">${farmer?.village || ''}</div></td>
+      <td>${o.item} × ${o.qty}${o.unit}</td>
+      <td><input class="fpo-weigh-input" data-weigh="${o.id}" type="number" min="0" step="0.5" value="${o.fpoWeighKg ?? o.qty}" aria-label="Weighment weight in kg"></td>
+      <td><div class="grade-picker" role="group" aria-label="AGMARK grade">${AGMARK_GRADES.map(g=>`
+        <button type="button" class="grade-btn" data-grade-order="${o.id}" data-grade-val="${g.id}" title="${g.label}">${g.id} · ${g.short}</button>`).join('')}</div></td>
+      <td><button class="btn-primary fpo-grade-btn" data-grade-confirm="${o.id}">Confirm grading</button></td>
+    </tr>`;
+  }).join('');
+
+  const enRouteRows = enRoute.map(o=>`
+    <tr class="fpo-muted-row">
+      <td><strong>${orderDisplayId(o)}</strong></td>
+      <td>${getUser(o.farmer)?.name || o.farmer}</td>
+      <td>${o.item} × ${o.qty}${o.unit}</td>
+      <td colspan="3"><span class="badge">🚜 En route to farm-gate collection</span></td>
+    </tr>`).join('');
+
+  root.innerHTML = `
+    <div class="section-head"><h3>${t('fpoTier1')}</h3><span class="muted">Digital weighment · AGMARK grading · first-mile aggregation</span></div>
+    <div class="card">
+      <table>
+        <thead><tr><th>Order</th><th>Source / farmer</th><th>Produce</th><th>Weighment (kg)</th><th>AGMARK grade</th><th></th></tr></thead>
+        <tbody>
+          ${gradeRows || `<tr><td colspan="6" class="fpo-empty-cell">✅ Nothing waiting for grading — lots appear here once farmers dispatch them (stage "Reached farmer city").</td></tr>`}
+          ${enRouteRows}
+        </tbody>
+      </table>
+    </div>
+    <div class="section-head" style="margin-top:22px;"><h3>Graded &amp; queued for batching</h3><span class="muted">${graded.length} lot${graded.length===1?'':'s'}</span></div>
+    <div class="card">
+      ${graded.length ? `<table>
+        <thead><tr><th>Order</th><th>Produce</th><th>Grade</th><th>Weighment</th><th>Status</th></tr></thead>
+        <tbody>${graded.map(o=>`
+          <tr>
+            <td><strong>${orderDisplayId(o)}</strong></td>
+            <td>${o.item} × ${o.qty}${o.unit}</td>
+            <td><span class="badge grade-badge-${o.fpoGrade}">AGMARK ${o.fpoGrade}</span></td>
+            <td>${o.fpoWeighKg} kg</td>
+            <td>${o.fpoBatchId ? `<span class="status-chip assembling">In batch ${String(o.fpoBatchId).toUpperCase()}</span>` : '<span class="badge">Awaiting corridor batch</span>'}</td>
+          </tr>`).join('')}</tbody>
+      </table>` : `<div class="empty-state"><div class="glyph">🏷️</div>No lots graded yet.</div>`}
+    </div>
+  `;
+
+  // Grade picker: single-select per row.
+  root.querySelectorAll('.grade-btn').forEach(btn=>{
+    btn.onclick = ()=>{
+      root.querySelectorAll(`.grade-btn[data-grade-order="${btn.dataset.gradeOrder}"]`)
+        .forEach(other=> other.classList.toggle('selected', other===btn));
+    };
+  });
+  root.querySelectorAll('[data-grade-confirm]').forEach(btn=>{
+    btn.onclick = ()=> confirmFpoGrade(btn.dataset.gradeConfirm);
+  });
+}
+
+// TIER 2 — LTL aggregation engine: pick corridor + vehicle, tick the graded
+// lots to consolidate, watch the capacity meter, then dispatch the batch.
+function renderFpoCorridors(root){
+  const queue = fpoBatchQueue();
+  const batches = fpoMyBatches().slice().reverse();
+
+  root.innerHTML = `
+    <div class="section-head"><h3>${t('fpoTier2')}</h3><span class="muted">Less-than-truckload consolidation · shared freight</span></div>
+    <div class="card">
+      <div class="form-grid">
+        <label>Freight corridor
+          <select id="fpoCorridorSelect">${FPO_CORRIDORS.map(c=>`<option${c==='Nilgiris → Thanjavur'?' selected':''}>${c}</option>`).join('')}</select>
+        </label>
+        <label>Vehicle
+          <select id="fpoVehicleSelect">${Object.entries(FPO_VEHICLES).map(([key,v])=>`<option value="${key}">${v.label} · ${v.capacityKg} kg</option>`).join('')}</select>
+        </label>
+      </div>
+      <div class="capacity-meter">
+        <div class="capacity-legend"><span>Selected load</span><strong id="fpoCapacityLabel">0 kg</strong></div>
+        <div class="capacity-track"><div class="capacity-fill" id="fpoCapacityFill" style="width:0%"></div></div>
+      </div>
+      <div class="fpo-queue-list">${queue.length ? queue.map(o=>`
+        <label class="fpo-queue-row">
+          <input type="checkbox" class="fpo-queue-check" value="${o.id}">
+          <span class="fpo-queue-id">${orderDisplayId(o)}</span>
+          <span class="fpo-queue-item">${o.item} × ${o.qty}${o.unit}</span>
+          <span class="badge grade-badge-${o.fpoGrade}">AGMARK ${o.fpoGrade}</span>
+          <strong class="fpo-queue-weight">${o.fpoWeighKg} kg</strong>
+          <span class="order-sub">${getUser(o.farmer)?.name || o.farmer}</span>
+        </label>`).join('') : `<div class="empty-state"><div class="glyph">📦</div>The batching queue is empty — grade lots in Tier-1 first.</div>`}</div>
+      <button class="btn-primary" id="fpoCreateBatchBtn" style="margin-top:14px;">🚛 Create consolidated batch</button>
+    </div>
+    <div class="section-head" style="margin-top:22px;"><h3>Corridor batches</h3><span class="muted">${batches.length} total</span></div>
+    <div id="fpoBatchList">${batches.length ? batches.map(b=>`
+      <div class="batch-card">
+        <div>
+          <div class="order-item-name">${b.corridor} <span class="status-chip ${b.status}">${fpoBatchStatusLabel(b.status)}</span></div>
+          <div class="batch-meta">${FPO_VEHICLES[b.vehicle]?.label || b.vehicle} · ${fpoBatchWeightKg(b)} / ${FPO_VEHICLES[b.vehicle]?.capacityKg || '?'} kg · ${b.orderIds.length} order${b.orderIds.length===1?'':'s'} · ${b.sourceCluster} → ${b.destinationHub}</div>
+        </div>
+        <div class="batch-actions">
+          ${b.status==='assembling'
+            ? `<button class="btn-primary" data-dispatch="${b.id}">Dispatch to hub →</button>`
+            : `<span class="order-sub">${b.status==='dispatched' ? 'Dispatched ' + new Date(b.dispatchedAt).toLocaleDateString() : 'De-batched at hub'}</span>`}
+        </div>
+      </div>`).join('') : `<div class="card"><div class="empty-state"><div class="glyph">🚛</div>No batches assembled yet.</div></div>`}</div>
+  `;
+
+  // Live capacity meter — recompute on checkbox / vehicle changes.
+  const updateCapacity = ()=>{
+    const selected = [...root.querySelectorAll('.fpo-queue-check:checked')].map(el=>el.value);
+    const orders = store.orders();
+    const load = selected.reduce((sum,id)=> sum + Number(orders.find(o=>o.id===id)?.fpoWeighKg || 0), 0);
+    const capacity = FPO_VEHICLES[document.getElementById('fpoVehicleSelect').value].capacityKg;
+    const pct = Math.min(100, capacity ? (load / capacity) * 100 : 0);
+    const fill = document.getElementById('fpoCapacityFill');
+    fill.style.width = pct.toFixed(0) + '%';
+    fill.classList.toggle('over', load > capacity);
+    document.getElementById('fpoCapacityLabel').textContent = `${load} / ${capacity} kg${load > capacity ? ' — OVER CAPACITY' : ''}`;
+  };
+  root.querySelectorAll('.fpo-queue-check').forEach(check=> check.onchange = updateCapacity);
+  document.getElementById('fpoVehicleSelect').onchange = updateCapacity;
+  updateCapacity();
+
+  document.getElementById('fpoCreateBatchBtn').onclick = createFpoBatch;
+  root.querySelectorAll('[data-dispatch]').forEach(btn=>{
+    btn.onclick = ()=> dispatchFpoBatch(btn.dataset.dispatch);
+  });
+}
+
+// TIER 3 — destination-hub de-batching: receive incoming corridor shipments,
+// read the consumer's chosen delivery slot, and assign an EV doorstep agent
+// (which flips the order to 'outForDelivery' via setOrderStage).
+function renderFpoHub(root){
+  const incoming = fpoMyBatches().filter(b=>b.status==='dispatched');
+  const queue = fpoHubQueue();
+  const dispatched = fpoDispatched()
+    .filter(o=>['outForDelivery','delivered'].includes(getOrderStage(o)))
+    .sort((a,b)=> String(b.fpoEvAssignedAt||'').localeCompare(String(a.fpoEvAssignedAt||'')));
+
+  root.innerHTML = `
+    <div class="section-head"><h3>${t('fpoTier3')}</h3><span class="muted">De-batching · consumer slots · EV last-mile</span></div>
+    <div class="card">
+      <div class="order-item-name" style="margin-bottom:6px;">📥 Incoming corridor shipments</div>
+      ${incoming.length ? incoming.map(b=>`
+        <div class="order-row">
+          <div>
+            <div class="order-item-name">${b.corridor} <span class="status-chip dispatched">In transit</span></div>
+            <div class="order-sub">${FPO_VEHICLES[b.vehicle]?.label || b.vehicle} · ${fpoBatchWeightKg(b)} kg · ${b.orderIds.length} order${b.orderIds.length===1?'':'s'} · left ${new Date(b.dispatchedAt).toLocaleDateString()}</div>
+          </div>
+          <button class="btn-primary" data-receive="${b.id}">Receive shipment</button>
+        </div>`).join('')
+        : `<div class="empty-state"><div class="glyph">🚚</div>No corridor shipments in transit right now.</div>`}
+    </div>
+    <div class="section-head" style="margin-top:22px;"><h3>Hub delivery queue</h3><span class="muted">${queue.length} waiting · consumer-chosen slots</span></div>
+    <div class="card" id="fpoHubQueue">${queue.length ? queue.map(o=>{
+      const slot = o.fpoDeliveryTiming?.label;
+      return `<div class="order-row">
+        <div>
+          <div class="order-item-name">${orderDisplayId(o)} · ${o.item} × ${o.qty}${o.unit} <span class="badge">${deliveryStageLabel(o)}</span></div>
+          <div class="order-sub">${o.consumer} · ${o.address}</div>
+          <div class="slot-chip ${slot ? '' : 'awaiting'}">🗓 ${slot || 'Awaiting consumer slot'}</div>
+        </div>
+        <div class="fpo-ev-assign">
+          <select data-ev-agent="${o.id}" aria-label="EV doorstep agent">
+            <option value="">Choose EV agent</option>
+            ${FPO_EV_AGENTS.map(a=>`<option>${a}</option>`).join('')}
+          </select>
+          <button class="btn-primary" data-assign="${o.id}">🛵 Assign &amp; dispatch</button>
+        </div>
+      </div>`;
+    }).join('') : `<div class="empty-state"><div class="glyph">🏢</div>No orders waiting at the hub.</div>`}</div>
+    <div class="section-head" style="margin-top:22px;"><h3>EV last-mile dispatch</h3><span class="muted">${dispatched.length} assigned</span></div>
+    <div class="card">${dispatched.length ? dispatched.map(o=>`
+      <div class="order-row">
+        <div>
+          <div class="order-item-name">${orderDisplayId(o)} · ${o.item} <span class="badge">${deliveryStageLabel(o)}</span></div>
+          <div class="order-sub">${o.consumer} · ${o.address}</div>
+        </div>
+        <span class="slot-chip">🛵 ${o.fpoEvAgent}</span>
+      </div>`).join('') : `<div class="empty-state"><div class="glyph">🛵</div>No EV assignments yet.</div>`}</div>
+  `;
+
+  root.querySelectorAll('[data-receive]').forEach(btn=>{
+    btn.onclick = ()=> receiveFpoBatch(btn.dataset.receive);
+  });
+  root.querySelectorAll('[data-assign]').forEach(btn=>{
+    btn.onclick = ()=> assignFpoEvAgent(btn.dataset.assign);
+  });
+}
+
+// FPO PROFILE — public card + operational snapshot (topbar user chip).
+function renderFpoProfile(root){
+  const u = getUser(currentUser);
+  const batches = fpoMyBatches();
+  const handled = store.orders().filter(o=>o.fpo===currentUser && o.fpoGrade).length;
+  const tonnes = batches.reduce((s,b)=> s + fpoBatchWeightKg(b), 0) / 1000;
+  root.innerHTML = `
+    <div class="section-head"><h3>${t('profile')}</h3></div>
+    <div class="card">
+      <div class="profile-head">
+        <div class="avatar">${u.name.split(' ').map(x=>x[0]).join('').slice(0,2)}</div>
+        <div>
+          <h3 style="font-size:20px;">🏢 ${u.name}</h3>
+          <div class="order-sub">📍 ${u.village || 'Location not set'} · 📞 ${u.phone}</div>
+          <div class="order-sub">${u.cluster || '—'} → ${u.hub || '—'}</div>
+        </div>
+      </div>
+      <p style="margin-top:14px;color:var(--ink-soft);">${u.bio || 'No bio yet.'}</p>
+    </div>
+    <div class="section-head" style="margin-top:20px;"><h3>Operations snapshot</h3></div>
+    <div class="stat-strip">
+      <div class="stat-cell"><span class="stat-num">${handled}</span><span class="stat-label">Lots aggregated</span></div>
+      <div class="stat-cell"><span class="stat-num">${batches.length}</span><span class="stat-label">Corridor batches</span></div>
+      <div class="stat-cell"><span class="stat-num">${tonnes.toFixed(2)} T</span><span class="stat-label">Freight handled</span></div>
+    </div>
+  `;
+}
+
+// FPO SETTINGS — appearance/theme/language plus cluster & hub profile fields.
+function renderFpoSettings(root){
+  const u = getUser(currentUser);
+  root.innerHTML = `
+    <div class="section-head settings-anchor" id="accountSettings"><h3>${t('settings')}</h3></div>
+    <div class="card">
+      ${colorModeSettingsMarkup()}
+      <div class="settings-row"><div><div class="settings-row-label">🎨 ${t('colorTheme')}</div>
+        <div class="settings-row-sub">${t('choosePalette')}</div></div></div>
+      <div id="themePanel" class="theme-picker-grid" role="group" aria-label="Color themes"></div>
+      <div class="settings-row"><div><div class="settings-row-label">❓ Help &amp; how to use the FPO portal</div>
+        <div class="settings-row-sub">Tier-1 grades farm-gate arrivals, Tier-2 assembles and dispatches corridor batches, Tier-3 receives shipments and assigns EV agents. Every action updates the consumer's live tracking.</div></div></div>
+      <div class="settings-row"><div class="settings-row-label">🌐 ${t('language')}</div>
+        <select id="settingsLang3" class="lang-select"><option value="en">English</option><option value="ta">தமிழ்</option><option value="hi">हिन्दी</option></select></div>
+      <div class="settings-row"><div><div class="settings-row-label">🏢 Edit FPO details</div></div></div>
+      <div class="form-grid" style="margin-top:10px;">
+        <label>Location<input type="text" id="editFpoVillage" value="${u.village||''}"></label>
+        <label>Source cluster<input type="text" id="editFpoCluster" value="${u.cluster||''}"></label>
+        <label>Destination hub<input type="text" id="editFpoHub" value="${u.hub||''}"></label>
+        <label class="full">Bio<input type="text" id="editFpoBio" value="${u.bio||''}"></label>
+      </div>
+      <button class="btn-primary" id="saveFpoProfileBtn" style="margin-top:12px;">Save changes</button>
+    </div>
+  `;
+  bindColorModeButtons();
+  renderThemeMenu();
+  document.getElementById('settingsLang3').value = lang;
+  document.getElementById('settingsLang3').onchange = e=>{
+    lang = e.target.value; localStorage.setItem('ud_lang', lang);
+    updateLocalizedBrand();
+    document.getElementById('langSelect').value = lang;
+    renderNav(); renderView(currentView);
+  };
+  document.getElementById('saveFpoProfileBtn').onclick = ()=>{
+    const users = store.users();
+    users[currentUser].village = document.getElementById('editFpoVillage').value;
+    users[currentUser].cluster = document.getElementById('editFpoCluster').value;
+    users[currentUser].hub = document.getElementById('editFpoHub').value;
+    users[currentUser].bio = document.getElementById('editFpoBio').value;
+    store.saveUsers(users);
+    toast("✅ FPO details updated");
   };
 }
 
