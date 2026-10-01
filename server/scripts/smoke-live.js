@@ -187,6 +187,43 @@ function check(name, cond, detail) {
     r.status === 200 && r.json.data.fpo_grade === 'A' && r.json.data.fpo_ev_agent === 'Kumar · EV-01',
     'grade=' + (r.json.data && r.json.data.fpo_grade));
 
+  // ---- in-app notifications (created by every workflow event above)
+  r = await call('GET', '/api/notifications?limit=100', { token: consumer.token });
+  check('GET /api/notifications (consumer)',
+    r.status === 200 && Array.isArray(r.json.data.items),
+    r.json.data.unread + ' unread / ' + r.json.data.total + ' total');
+
+  const consumerNotifs = r.json.data.items || [];
+  check('workflow events produced notifications',
+    consumerNotifs.some((n) => ['order', 'grade', 'fpo'].includes(n.type)),
+    [...new Set(consumerNotifs.map((n) => n.type))].join(',') || 'none');
+
+  const unreadNotif = consumerNotifs.find((n) => !n.is_read);
+  check('at least one unread notification', !!unreadNotif,
+    unreadNotif ? unreadNotif.message.slice(0, 52) : 'none');
+
+  if (unreadNotif) {
+    r = await call('PATCH', `/api/notifications/${unreadNotif.id}/read`, { token: consumer.token });
+    check('PATCH /api/notifications/:id/read', r.status === 200 && r.json.data.is_read === true,
+      r.json.data && r.json.data.message.slice(0, 44));
+
+    r = await call('GET', '/api/notifications?unread_only=true&limit=100', { token: consumer.token });
+    check('unread_only no longer lists it',
+      r.status === 200 && !r.json.data.items.some((n) => n.id === unreadNotif.id));
+
+    r = await call('PATCH', `/api/notifications/${unreadNotif.id}/read`, { token: farmer.token });
+    check("another user's notification → 404 NOT_FOUND",
+      r.status === 404 && r.json.error.code === 'NOT_FOUND', r.json.error && r.json.error.code);
+  }
+
+  r = await call('GET', '/api/notifications', { token: fpo.token });
+  check('FPO is never notified about its own actions',
+    r.status === 200 && !r.json.data.items.some((n) => n.type === 'grade'),
+    r.json.data.items.filter((n) => n.type === 'grade').length + ' grade alerts (expect 0)');
+
+  r = await call('GET', '/api/notifications');
+  check('notifications require auth → 401', r.status === 401, r.json.error && r.json.error.code);
+
   // ---- role guards
   r = await call('POST', '/api/produce', { token: consumer.token, body: { name: 'X', category: 'vegetable', price: 1 } });
   check('consumer cannot create produce → 403', r.status === 403, r.json.error && r.json.error.code);

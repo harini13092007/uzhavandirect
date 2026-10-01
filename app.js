@@ -614,6 +614,10 @@ function markNotifRead(id){
   store.saveUsers(users);
   refreshNotifBadge();
   renderNotifPanel();
+  // Backend-owned alerts must also be marked read on the backend, otherwise
+  // the next sync would flip the badge straight back to unread. api.js rolls
+  // the local flag back if the server rejects the call.
+  if (n && n.apiId) markNotificationReadOnBackend(n.apiId);
 }
 /* ===============================
    AUTHENTICATION / LOGIN / SIGNUP
@@ -2096,6 +2100,12 @@ function fpoBatchStatusLabel(status){
 // Push an alert onto the consumer's notification bell (same ledger the
 // donation alerts use) so FPO actions are visible to the buyer too.
 function notifyOrderConsumer(order, message){
+  // BACKEND-OWNED ORDERS: the API already created this alert during the very
+  // same action (server/src/lib/notify.js), so writing a local copy as well
+  // would show it twice in the bell. Seeded demo orders, and everything
+  // created while the backend is offline, still need the local copy — those
+  // never reach the server.
+  if (order && order.apiId && typeof apiOnline === 'boolean' && apiOnline && apiToken) return;
   const users = store.users();
   const uname = Object.keys(users).find(k=> users[k].type==='consumer' && users[k].name===order.consumer);
   if (!uname) return;

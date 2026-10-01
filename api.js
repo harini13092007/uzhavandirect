@@ -268,6 +268,12 @@ const api = {
     createBatch:  (payload)   => apiRequest('POST',  '/api/fpo/batches', { body: payload }),
     updateBatch:  (id, patch) => apiRequest('PATCH', '/api/fpo/batches/' + id, { body: patch }),
   },
+
+  /** In-app bell — see server/src/routes/notifications.js. */
+  notifications: {
+    list:     (params) => apiRequest('GET',   '/api/notifications' + apiQuery(params)),
+    markRead: (id)     => apiRequest('PATCH', '/api/notifications/' + id + '/read'),
+  },
 };
 
 /* ============================================================================
@@ -610,6 +616,10 @@ async function apiSyncAll(options = {}) {
       const batches = await api.fpo.listBatches();
       if (batches.ok) summary.batches = apiMergeInto('ud_fpo_batches', batches.data.map(batchFromApi)).added;
     }
+
+    // Refresh the bell alongside everything else, so a login shows the alerts
+    // the backend has accumulated (see syncNotifications).
+    summary.notifications = await syncNotifications();
   }
 
   apiRenderStatus();
@@ -895,7 +905,7 @@ async function syncOrderStageToApi(order, stage) {
   if (!(await apiProbe())) return;
 
   const res = await api.orders.setStage(order.apiId, stage);
-  if (res.ok) return;
+  if (res.ok) { syncNotifications(); return; }
 
   // The backend runs the 7-step pipeline. When the front-end's extra
   // 'atCustomerCity' step (mapped to atFpo) makes a local move look like a
@@ -914,7 +924,8 @@ async function syncOrderStatusToApi(order, status) {
   if (!API_ENABLED || !apiToken || !order || !order.apiId) return;
   if (!(await apiProbe())) return;
   const res = await api.orders.setStatus(order.apiId, status);
-  if (!res.ok) apiToastError(res.error, 'update order status');
+  if (res.ok) { syncNotifications(); return; }
+  apiToastError(res.error, 'update order status');
 }
 
 /* ------------------------------------------------- FPO Tier-1 / Tier-3 ---- */
@@ -930,7 +941,7 @@ async function syncFpoGradeToApi(order, grade, weighKg) {
   if (!API_ENABLED || !apiToken || !order || !order.apiId) return;
   if (!(await apiProbe())) return;
   const res = await api.orders.setGrading(order.apiId, grade, weighKg);
-  if (res.ok) return;
+  if (res.ok) { syncNotifications(); return; }
 
   // A lot that has not reached the collection point yet is a local/remote
   // timing difference, not something to alarm the manager about.
@@ -950,7 +961,7 @@ async function syncEvAgentToApi(order, agent) {
   if (!API_ENABLED || !apiToken || !order || !order.apiId) return;
   if (!(await apiProbe())) return;
   const res = await api.orders.assignAgent(order.apiId, agent);
-  if (res.ok) return;
+  if (res.ok) { syncNotifications(); return; }
   if (res.error && ['BATCH_NOT_RECEIVED', 'STAGE_REGRESSION', 'STAGE_NOT_ALLOWED'].includes(res.error.code)) {
     // The local UI already enforces the receive-first rule, so these only mean
     // the two sides briefly disagreed — keep the local state and move on.
@@ -996,5 +1007,105 @@ async function syncBatchStatusToApi(batch, status) {
   if (!API_ENABLED || !apiToken || !batch || !batch.apiId) return;
   if (!(await apiProbe())) return;
   const res = await api.fpo.updateBatch(batch.apiId, { transit_status: toApiBatchStatus(status) });
-  if (!res.ok) apiToastError(res.error, 'update FPO batch');
+  if (res.ok) { syncNotifications(); return; }
+  apiToastError(res.error, 'update FPO batch');
+}
+
+/* ------------------------------------------------------------ notifications */
+
+/**
+ * Backend row ➜ the shape the existing bell already renders
+ * (`{id, type, message, read, date}` — see renderNotifPanel in app.js).
+ * `apiId` marks the record as server-owned so a later sync can replace it
+ * without also clobbering alerts that only exist locally.
+ */
+function notifFromApi(row) {
+  return {
+    id: 'api_n' + row.id,
+    apiId: Number(row.id),
+    type: row.type || 'system',
+    message: row.message,
+    read: !!row.is_read,
+    date: row.created_at,
+    orderId: row.order_id || undefined,
+    batchId: row.batch_id || undefined,
+  };
+}
+
+/**
+ * Pull this user's notifications from the backend and mirror them into the
+ * existing `ud_users[username].notifications` array.
+ *
+ * Server-owned entries (those with an `apiId`) are replaced wholesale; entries
+ * without one — created by the local demo orders or while the backend was
+ * offline — are kept, so going online never loses an alert.
+ *
+ * Never throws: the bell degrades to "whatever we already had".
+ */
+async function syncNotifications() {
+  try {
+    if (!API_ENABLED || !apiToken || !currentUser) return false;
+    if (!(await apiProbe())) return false;
+
+    const res = await api.notifications.list({ limit: 50 });
+    if (!res.ok) {
+      console.warn('[api] notifications sync failed:', res.error);
+      return false;
+    }
+
+    const users = store.users() || {};
+    const me = users[currentUser];
+    if (!me) return false;
+
+    const remote = ((res.data && res.data.items) || []).map(notifFromApi);
+    const localOnly = (me.notifications || []).filter(n => !n.apiId);
+
+    // Newest first — the same order the dropdown renders in.
+    me.notifications = remote
+      .concat(localOnly)
+      .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+    store.saveUsers(users);
+
+    if (typeof refreshNotifBadge === 'function') refreshNotifBadge();
+    // If the dropdown happens to be open, keep it truthful too.
+    const panel = document.getElementById('notifPanel');
+    if (panel && !panel.classList.contains('hidden') && typeof renderNotifPanel === 'function') {
+      renderNotifPanel();
+    }
+    return true;
+  } catch (err) {
+    console.warn('[api] notifications sync error:', err);
+    return false;
+  }
+}
+
+/**
+ * Tell the backend that an alert was read. The local copy was already flipped
+ * by markNotifRead() for instant feedback — if the server then *rejects* the
+ * call we undo it, so the next sync can't flip the badge back behind the
+ * user's back. An unreachable backend is not an error: offline mode simply
+ * keeps the local flag.
+ */
+async function markNotificationReadOnBackend(apiId) {
+  if (!API_ENABLED || !apiToken || !currentUser) return false;
+  if (!(await apiProbe())) return false;
+
+  const res = await api.notifications.markRead(apiId);
+  if (res.ok) return true;
+
+  try {
+    const users = store.users() || {};
+    const me = users[currentUser];
+    const notif = ((me && me.notifications) || []).find(n => Number(n.apiId) === Number(apiId));
+    if (notif) {
+      notif.read = false;
+      store.saveUsers(users);
+      if (typeof refreshNotifBadge === 'function') refreshNotifBadge();
+      if (typeof renderNotifPanel === 'function') renderNotifPanel();
+    }
+  } catch (_) {
+    /* the revert is best-effort */
+  }
+  console.warn('[api] mark notification read failed:', res.error);
+  return false;
 }

@@ -714,6 +714,172 @@ test('fpo: an order with no corridor batch is dispatched directly', async () => 
   assert.equal(assigned.json.data.delivery_stage, 'outForDelivery');
 });
 
+/* ============================== notifications ============================ */
+
+/** Current user's notifications, newest first. */
+async function myNotifications(token, query = '') {
+  const r = await api('GET', '/api/notifications' + query, { token });
+  assert.equal(r.status, 200, JSON.stringify(r.json));
+  return r.json.data;
+}
+
+test('notifications: workflow events notify the right people', async () => {
+  const consumerId = (await api('GET', '/api/auth/me', { token: tokens.consumer })).json.data.id;
+  const farmerId = (await api('GET', '/api/auth/me', { token: tokens.farmer })).json.data.id;
+  const fpoId = (await api('GET', '/api/auth/me', { token: tokens.fpo })).json.data.id;
+
+  // orderAtCollectionPoint() advances the order 3 times → the consumer should
+  // have heard about every one of those stage moves.
+  const orderId = await orderAtCollectionPoint();
+
+  const consumerBefore = await myNotifications(tokens.consumer, '?limit=200');
+  const stageAlerts = consumerBefore.items.filter((n) => n.order_id === orderId && n.type === 'order');
+  assert.ok(stageAlerts.length >= 3, `consumer heard about each stage move (got ${stageAlerts.length})`);
+  assert.ok(consumerBefore.unread > 0, 'unread count is reported');
+
+  // Tier-1 grading completion → the farmer and consumer are told, the acting
+  // FPO is not (it already knows — notifyOrderParticipants skips the actor).
+  const graded = await api('PATCH', `/api/orders/${orderId}/grading`, {
+    token: tokens.fpo,
+    body: { fpo_grade: 'A', fpo_weigh_kg: 7 },
+  });
+  assert.equal(graded.status, 200, JSON.stringify(graded.json));
+
+  const farmerData = await myNotifications(tokens.farmer, '?limit=200');
+  const gradeAlerts = farmerData.items.filter((n) => n.order_id === orderId && n.type === 'grade');
+  assert.equal(gradeAlerts.length, 1, 'farmer is told their lot was graded');
+  assert.ok(gradeAlerts[0].message.includes('A'), 'message carries the grade');
+  assert.ok(gradeAlerts[0].created_at, 'created_at is present');
+
+  const fpoData = await myNotifications(tokens.fpo, '?limit=200');
+  assert.equal(
+    fpoData.items.filter((n) => n.type === 'grade' && n.order_id === orderId).length,
+    0,
+    'the acting FPO is not notified about its own grading'
+  );
+
+  // Batch dispatch + receive → everyone on the shipment is told.
+  const batch = await api('POST', '/api/fpo/batches', {
+    token: tokens.fpo,
+    body: {
+      source_cluster: 'Nilgiris cluster',
+      destination_hub: 'Thanjavur hub',
+      consolidated_weight_kg: 7,
+      vehicle_type: 'truck',
+      orders_list: [orderId],
+    },
+  });
+  assert.equal(batch.status, 201, JSON.stringify(batch.json));
+  state.notifyBatchId = batch.json.data.id;
+
+  await api('PATCH', `/api/fpo/batches/${batch.json.data.id}`, {
+    token: tokens.fpo,
+    body: { transit_status: 'dispatched' },
+  });
+  let after = await myNotifications(tokens.consumer, '?limit=200');
+  const dispatchAlerts = after.items.filter((n) => n.batch_id === batch.json.data.id);
+  assert.equal(dispatchAlerts.length, 1, 'dispatch alert delivered to the consumer');
+  assert.ok(dispatchAlerts[0].message.includes('dispatched'));
+
+  await api('PATCH', `/api/fpo/batches/${batch.json.data.id}`, {
+    token: tokens.fpo,
+    body: { transit_status: 'dispatched' },
+  });
+  after = await myNotifications(tokens.consumer, '?limit=200');
+  assert.equal(
+    after.items.filter((n) => n.batch_id === batch.json.data.id).length,
+    1,
+    're-patching the same status does not spam the bell'
+  );
+
+  await api('PATCH', `/api/fpo/batches/${batch.json.data.id}`, {
+    token: tokens.fpo,
+    body: { transit_status: 'received' },
+  });
+  after = await myNotifications(tokens.consumer, '?limit=200');
+  assert.equal(
+    after.items.filter((n) => n.batch_id === batch.json.data.id).length,
+    2,
+    'receive alert delivered as well'
+  );
+
+  // EV assignment → consumer hears once more, again with the FPO excluded.
+  const assigned = await api('PATCH', `/api/orders/${orderId}/agent`, {
+    token: tokens.fpo,
+    body: { agent: 'Kumar · EV-01' },
+  });
+  assert.equal(assigned.status, 200, JSON.stringify(assigned.json));
+  after = await myNotifications(tokens.consumer, '?limit=200');
+  const evAlerts = after.items.filter((n) => n.order_id === orderId && n.type === 'fpo');
+  assert.ok(evAlerts.length >= 1, 'EV assignment alert delivered');
+  assert.ok(evAlerts.some((n) => n.message.includes('Kumar')));
+
+  // Sanity: everything written for this order belongs to a real user.
+  assert.ok(consumerId && farmerId && fpoId);
+});
+
+test('notifications: list, mark read, and cross-user isolation', async () => {
+  const consumerId = (await api('GET', '/api/auth/me', { token: tokens.consumer })).json.data.id;
+  const farmerId = (await api('GET', '/api/auth/me', { token: tokens.farmer })).json.data.id;
+
+  const list = await myNotifications(tokens.consumer, '?limit=5');
+  assert.ok(Array.isArray(list.items), 'items is an array');
+  assert.equal(typeof list.unread, 'number');
+  assert.equal(typeof list.total, 'number');
+  assert.ok(list.items.length > 0, 'the consumer has notifications from the previous test');
+  assert.ok(
+    list.items.every((n) => n.user_id === consumerId),
+    'a user only ever sees their own notifications'
+  );
+  assert.ok(list.items.every((n) => typeof n.is_read === 'boolean'));
+
+  // Another user's notifications are not readable either.
+  const farmerData = await myNotifications(tokens.farmer, '?limit=5');
+  assert.ok(
+    farmerData.items.every((n) => n.user_id === farmerId),
+    'the farmer only sees their own'
+  );
+  assert.ok(
+    !farmerData.items.some((n) => list.items.some((mine) => mine.id === n.id)),
+    'the two lists share no notification ids'
+  );
+
+  // Mark one read.
+  const target = list.items.find((n) => !n.is_read);
+  assert.ok(target, 'there is an unread notification to exercise');
+
+  const read = await api('PATCH', `/api/notifications/${target.id}/read`, {
+    token: tokens.consumer,
+  });
+  assert.equal(read.status, 200, JSON.stringify(read.json));
+  assert.equal(read.json.data.is_read, true, 'marked as read');
+  assert.equal(read.json.data.id, target.id);
+
+  // …and it survives a fresh GET, having left the unread-only view.
+  const unreadOnly = await myNotifications(tokens.consumer, '?unread_only=true&limit=200');
+  assert.ok(
+    !unreadOnly.items.some((n) => n.id === target.id),
+    'read notifications leave the unread-only view'
+  );
+
+  // Another user cannot mark my notification as read (404, existence hidden).
+  const foreign = await api('PATCH', `/api/notifications/${target.id}/read`, {
+    token: tokens.farmer,
+  });
+  assert.equal(foreign.status, 404);
+  assert.equal(foreign.json.error.code, 'NOT_FOUND');
+
+  // A made-up id is a 404 too, not a 500.
+  const missing = await api('PATCH', '/api/notifications/999999/read', {
+    token: tokens.consumer,
+  });
+  assert.equal(missing.status, 404);
+
+  // And it is rejected without a token at all.
+  assert.equal((await api('GET', '/api/notifications')).status, 401);
+  assert.equal((await api('PATCH', `/api/notifications/${target.id}/read`)).status, 401);
+});
+
 test('unauthenticated write endpoints are rejected', async () => {
   assert.equal((await api('POST', '/api/produce', { body: { category: 'x', name: 'y', price: 1 } })).status, 401);
   assert.equal((await api('POST', '/api/orders', { body: { produce_id: 1, quantity: 1, address: 'x' } })).status, 401);
