@@ -153,17 +153,6 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS fpo_ev_agent       TEXT;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS fpo_ev_assigned_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS idx_orders_fpo_batch ON orders (fpo_batch_id);
 
--- MIGRATION: notifications did not exist before this step either.
-CREATE TABLE IF NOT EXISTS notifications (
-  id         SERIAL PRIMARY KEY,
-  user_id    INTEGER     NOT NULL REFERENCES users (id) ON DELETE CASCADE,
-  type       TEXT        NOT NULL DEFAULT 'info'
-             CHECK (type IN ('order', 'grade', 'fpo', 'system')),
-  message    TEXT        NOT NULL,
-  order_id   INTEGER     REFERENCES orders (id) ON DELETE SET NULL,
-  batch_id   INTEGER     REFERENCES fpo_batches (id) ON DELETE SET NULL,
-  is_read    BOOLEAN     NOT NULL DEFAULT FALSE,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications (user_id);
-CREATE INDEX IF NOT EXISTS idx_notifications_unread ON notifications (user_id, is_read);
+-- (The `notifications` table needs no ALTER migration above: unlike a column,
+--  `CREATE TABLE IF NOT EXISTS` in the main body creates it whenever it is
+--  missing, so it self-heals on an existing database.)

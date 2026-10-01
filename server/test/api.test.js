@@ -550,6 +550,14 @@ test('fpo: inbound queue lists ungraded lots and grading claims the lot', async 
     403,
     'farmers cannot grade'
   );
+  assert.equal(
+    (await api('PATCH', `/api/orders/${orderId}/grading`, {
+      token: tokens.consumer,
+      body: { fpo_grade: 'A', fpo_weigh_kg: 10 },
+    })).status,
+    403,
+    'consumers cannot grade either'
+  );
 
   // Validation.
   const badGrade = await api('PATCH', `/api/orders/${orderId}/grading`, {
@@ -582,6 +590,13 @@ test('fpo: inbound queue lists ungraded lots and grading claims the lot', async 
   assert.equal(Number(graded.json.data.fpo_weigh_kg), 12.5);
   assert.ok(graded.json.data.fpo_graded_at, 'fpo_graded_at is stamped');
   assert.equal(graded.json.data.fpo_id, fpoId, 'lot is claimed by this FPO');
+
+  // The values must survive a completely fresh read, not just the PATCH reply.
+  const fresh = await api('GET', `/api/orders/${orderId}`, { token: tokens.fpo });
+  assert.equal(fresh.status, 200, JSON.stringify(fresh.json));
+  assert.equal(fresh.json.data.fpo_grade, 'B', 'grade survives a fresh GET');
+  assert.equal(Number(fresh.json.data.fpo_weigh_kg), 12.5, 'weighment survives a fresh GET');
+  assert.ok(fresh.json.data.fpo_graded_at, 'timestamp survives a fresh GET');
 
   // Graded lots leave the default queue but remain visible on request.
   const afterGrading = await api('GET', '/api/fpo/inbound', { token: tokens.fpo });

@@ -22,6 +22,7 @@ const {
   asNumber,
   asId,
 } = require('../lib/http');
+const { notifyManyOrders, selectBatchOrders } = require('../lib/notify');
 
 const router = express.Router();
 
@@ -248,10 +249,29 @@ router.patch(
         `UPDATE fpo_batches SET ${sets.join(', ')} WHERE id = $${params.length} RETURNING *`,
         params
       );
+      const saved = rows[0];
       if (b.orders_list !== undefined) {
-        await attachOrders(client, req.user.id, b.orders_list, rows[0]);
+        await attachOrders(client, req.user.id, b.orders_list, saved);
       }
-      return rows[0];
+
+      // In-app alerts for the two milestone transit changes. Only fired on a
+      // real transition, so re-patching the same status never spams the bell.
+      const milestone = ['dispatched', 'received'].includes(saved.transit_status)
+        && saved.transit_status !== batch.transit_status;
+      if (milestone) {
+        const members = await selectBatchOrders(
+          (b.orders_list || batch.orders_list || []).map(Number),
+          client
+        );
+        await notifyManyOrders(members, req.user.id, {
+          type: 'fpo',
+          batchId: id,
+          message: saved.transit_status === 'dispatched'
+            ? `${corridorLabel(saved)} shipment dispatched → ${saved.destination_hub}.`
+            : `Shipment received & de-batched at ${saved.destination_hub}.`,
+        }, client);
+      }
+      return saved;
     });
 
     // Include the attached orders' current state for convenience.

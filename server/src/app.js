@@ -12,6 +12,7 @@ const produceRouter = require('./routes/produce');
 const auctionsRouter = require('./routes/auctions');
 const ordersRouter = require('./routes/orders');
 const fpoRouter = require('./routes/fpo');
+const notificationsRouter = require('./routes/notifications');
 
 function limited({ windowMs, max, code }) {
   return rateLimit({
@@ -71,6 +72,7 @@ function createApp() {
   app.use('/api/auctions', auctionsRouter);
   app.use('/api/orders', ordersRouter);
   app.use('/api/fpo', fpoRouter);
+  app.use('/api/notifications', notificationsRouter);
 
   // JSON 404s (HTML for anything else would be confusing in an API client).
   app.use('/api', (req, res) => fail(res, 404, 'NOT_FOUND', 'Endpoint not found'));

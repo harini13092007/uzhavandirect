@@ -26,6 +26,10 @@ const {
   AGMARK_GRADES,
   DELIVERY_STAGES,
 } = require('../lib/http');
+const {
+  notifyOrderParticipants,
+  STAGE_LABELS,
+} = require('../lib/notify');
 
 const router = express.Router();
 
@@ -180,11 +184,21 @@ router.patch(
     requireFields(b, ['status']);
     const status = oneOf(b.status, STATUSES, 'status');
 
-    const { rows } = await query(
-      'UPDATE orders SET status = $1, updated_at = now() WHERE id = $2 RETURNING *',
-      [status, id]
-    );
-    return ok(res, rows[0]);
+    // The update and its notification commit together, so an alert can never
+    // describe a change that got rolled back.
+    const updated = await withTransaction(async (client) => {
+      const { rows } = await client.query(
+        'UPDATE orders SET status = $1, updated_at = now() WHERE id = $2 RETURNING *',
+        [status, id]
+      );
+      await notifyOrderParticipants(order, req.user.id, {
+        type: 'order',
+        orderId: id,
+        message: `Order #${id} ${order.produce_name || ''} changed to "${status}".`.replace(/\s+/g, ' '),
+      }, client);
+      return rows[0];
+    });
+    return ok(res, updated);
   })
 );
 
@@ -222,11 +236,25 @@ router.patch(
       });
     }
 
-    const { rows } = await query(
-      'UPDATE orders SET delivery_stage = $1, updated_at = now() WHERE id = $2 RETURNING *',
-      [stage, id]
-    );
-    return ok(res, rows[0], `Delivery stage → ${stage}`);
+    const updated = await withTransaction(async (client) => {
+      const { rows } = await client.query(
+        'UPDATE orders SET delivery_stage = $1, updated_at = now() WHERE id = $2 RETURNING *',
+        [stage, id]
+      );
+      // The consumer watches this most closely; the actor is always skipped.
+      await notifyOrderParticipants(
+        { ...order, delivery_stage: stage },
+        req.user.id,
+        {
+          type: 'order',
+          orderId: id,
+          message: `Order #${id} ${STAGE_LABELS[stage] || `moved to ${stage}`}.`,
+        },
+        client
+      );
+      return rows[0];
+    });
+    return ok(res, updated, `Delivery stage → ${stage}`);
   })
 );
 
@@ -274,18 +302,33 @@ router.patch(
       );
     }
 
-    const { rows } = await query(
-      `UPDATE orders
-          SET fpo_id         = $1,
-              fpo_grade      = $2,
-              fpo_weigh_kg   = $3,
-              fpo_graded_at  = now(),
-              updated_at     = now()
-        WHERE id = $4
-        RETURNING *`,
-      [req.user.id, grade, weighKg, id]
-    );
-    return ok(res, rows[0], `Graded ${grade} · ${weighKg} kg`);
+    const updated = await withTransaction(async (client) => {
+      const { rows } = await client.query(
+        `UPDATE orders
+            SET fpo_id         = $1,
+                fpo_grade      = $2,
+                fpo_weigh_kg   = $3,
+                fpo_graded_at  = now(),
+                updated_at     = now()
+          WHERE id = $4
+          RETURNING *`,
+        [req.user.id, grade, weighKg, id]
+      );
+      // Grading claims the lot, so include the FPO in the participant set —
+      // the acting FPO is still excluded, so only the farmer/consumer hear.
+      await notifyOrderParticipants(
+        { ...order, fpo_id: req.user.id },
+        req.user.id,
+        {
+          type: 'grade',
+          orderId: id,
+          message: `${order.produce_name || 'Your lot'} graded ${grade} · ${weighKg} kg at the farm gate.`,
+        },
+        client
+      );
+      return rows[0];
+    });
+    return ok(res, updated, `Graded ${grade} · ${weighKg} kg`);
   })
 );
 
@@ -346,17 +389,25 @@ router.patch(
       });
     }
 
-    const { rows } = await query(
-      `UPDATE orders
-          SET fpo_ev_agent       = $1,
-              fpo_ev_assigned_at = now(),
-              delivery_stage     = 'outForDelivery',
-              updated_at         = now()
-        WHERE id = $2
-        RETURNING *`,
-      [agent, id]
-    );
-    return ok(res, rows[0], `${agent} assigned — out for delivery`);
+    const updated = await withTransaction(async (client) => {
+      const { rows } = await client.query(
+        `UPDATE orders
+            SET fpo_ev_agent       = $1,
+                fpo_ev_assigned_at = now(),
+                delivery_stage     = 'outForDelivery',
+                updated_at         = now()
+          WHERE id = $2
+          RETURNING *`,
+        [agent, id]
+      );
+      await notifyOrderParticipants(order, req.user.id, {
+        type: 'fpo',
+        orderId: id,
+        message: `${agent} picked up order #${id} — out for delivery.`,
+      }, client);
+      return rows[0];
+    });
+    return ok(res, updated, `${agent} assigned — out for delivery`);
   })
 );
 
