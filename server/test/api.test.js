@@ -510,6 +510,195 @@ test('fpo: assigned fpo can advance stages from atFarmerCity onward', async () =
   assert.ok(Array.isArray(patch.json.data.orders));
 });
 
+/* ============================================================================
+ * FPO tier lifecycle: Tier-1 grading + Tier-2 corridor stamping + Tier-3 agent
+ * ========================================================================== */
+
+/** Buy 1 unit and walk it to the farm-gate collection point (atFarmerCity). */
+async function orderAtCollectionPoint() {
+  const created = await api('POST', '/api/orders', {
+    token: tokens.consumer,
+    body: { produce_id: state.produceId, quantity: 1, address: '14 Anna Nagar, Chennai' },
+  });
+  assert.equal(created.status, 201, JSON.stringify(created.json));
+  const id = created.json.data.id;
+  for (const s of ['confirmed', 'packed', 'atFarmerCity']) {
+    const r = await api('PATCH', `/api/orders/${id}/stage`, {
+      token: tokens.farmer,
+      body: { delivery_stage: s },
+    });
+    assert.equal(r.status, 200, `advance to ${s}: ${JSON.stringify(r.json)}`);
+  }
+  return id;
+}
+
+test('fpo: inbound queue lists ungraded lots and grading claims the lot', async () => {
+  const orderId = await orderAtCollectionPoint();
+  const fpoId = (await api('GET', '/api/auth/me', { token: tokens.fpo })).json.data.id;
+
+  const inbound = await api('GET', '/api/fpo/inbound', { token: tokens.fpo });
+  assert.equal(inbound.status, 200, JSON.stringify(inbound.json));
+  assert.ok(inbound.json.data.some((o) => o.id === orderId), 'new lot is in the Tier-1 queue');
+
+  // Only FPOs may grade.
+  assert.equal((await api('GET', '/api/fpo/inbound', { token: tokens.farmer })).status, 403);
+  assert.equal(
+    (await api('PATCH', `/api/orders/${orderId}/grading`, {
+      token: tokens.farmer,
+      body: { fpo_grade: 'A', fpo_weigh_kg: 10 },
+    })).status,
+    403,
+    'farmers cannot grade'
+  );
+
+  // Validation.
+  const badGrade = await api('PATCH', `/api/orders/${orderId}/grading`, {
+    token: tokens.fpo,
+    body: { fpo_grade: 'D', fpo_weigh_kg: 10 },
+  });
+  assert.equal(badGrade.status, 400);
+  assert.equal(badGrade.json.error.code, 'VALIDATION_ERROR');
+  assert.equal(
+    (await api('PATCH', `/api/orders/${orderId}/grading`, {
+      token: tokens.fpo,
+      body: { fpo_grade: 'A', fpo_weigh_kg: 0 },
+    })).status,
+    400,
+    'weight must be positive'
+  );
+  assert.equal(
+    (await api('PATCH', `/api/orders/${orderId}/grading`, { token: tokens.fpo, body: { fpo_grade: 'A' } })).status,
+    400,
+    'weight is required'
+  );
+
+  // Happy path — grade is normalised to upper case.
+  const graded = await api('PATCH', `/api/orders/${orderId}/grading`, {
+    token: tokens.fpo,
+    body: { fpo_grade: 'b', fpo_weigh_kg: 12.5 },
+  });
+  assert.equal(graded.status, 200, JSON.stringify(graded.json));
+  assert.equal(graded.json.data.fpo_grade, 'B');
+  assert.equal(Number(graded.json.data.fpo_weigh_kg), 12.5);
+  assert.ok(graded.json.data.fpo_graded_at, 'fpo_graded_at is stamped');
+  assert.equal(graded.json.data.fpo_id, fpoId, 'lot is claimed by this FPO');
+
+  // Graded lots leave the default queue but remain visible on request.
+  const afterGrading = await api('GET', '/api/fpo/inbound', { token: tokens.fpo });
+  assert.ok(!afterGrading.json.data.some((o) => o.id === orderId), 'graded lot left the open queue');
+  const withGraded = await api('GET', '/api/fpo/inbound?include_graded=true', { token: tokens.fpo });
+  assert.ok(withGraded.json.data.some((o) => o.id === orderId), 'include_graded returns it');
+
+  // A different FPO may not re-grade or steal a claimed lot.
+  const otherFpo = await api('POST', '/api/auth/register', {
+    body: { name: 'Other FPO', phone: '9000007777', password: 'secret123', role: 'fpo' },
+  });
+  const steal = await api('PATCH', `/api/orders/${orderId}/grading`, {
+    token: otherFpo.json.data.token,
+    body: { fpo_grade: 'A', fpo_weigh_kg: 5 },
+  });
+  assert.equal(steal.status, 403);
+  assert.equal(steal.json.error.code, 'FORBIDDEN');
+
+  state.gradedOrderId = orderId;
+});
+
+test('fpo: grading is refused before the lot reaches the collection point', async () => {
+  const created = await api('POST', '/api/orders', {
+    token: tokens.consumer,
+    body: { produce_id: state.produceId, quantity: 1, address: '12 Marina Road, Chennai' },
+  });
+  assert.equal(created.status, 201, JSON.stringify(created.json));
+
+  const tooEarly = await api('PATCH', `/api/orders/${created.json.data.id}/grading`, {
+    token: tokens.fpo,
+    body: { fpo_grade: 'A', fpo_weigh_kg: 3 },
+  });
+  assert.equal(tooEarly.status, 409);
+  assert.equal(tooEarly.json.error.code, 'STAGE_NOT_ALLOWED');
+  assert.equal(tooEarly.json.error.details.required, 'atFarmerCity');
+});
+
+test('fpo: attaching a batch stamps the corridor columns on the order', async () => {
+  const batch = await api('POST', '/api/fpo/batches', {
+    token: tokens.fpo,
+    body: {
+      source_cluster: 'Nilgiris cluster',
+      destination_hub: 'Thanjavur hub',
+      consolidated_weight_kg: 12.5,
+      vehicle_type: 'truck',
+      orders_list: [state.gradedOrderId],
+    },
+  });
+  assert.equal(batch.status, 201, JSON.stringify(batch.json));
+  state.corridorBatchId = batch.json.data.id;
+
+  const orders = await api('GET', '/api/orders', { token: tokens.fpo });
+  const order = orders.json.data.find((o) => o.id === state.gradedOrderId);
+  assert.ok(order, 'order is visible to the FPO');
+  assert.equal(order.fpo_batch_id, state.corridorBatchId);
+  assert.equal(order.fpo_corridor, 'Nilgiris cluster → Thanjavur hub');
+  assert.equal(order.fpo_vehicle, 'truck');
+
+  // The batch status patch must not wipe the corridor stamped above.
+  const patched = await api('PATCH', `/api/fpo/batches/${state.corridorBatchId}`, {
+    token: tokens.fpo,
+    body: { transit_status: 'dispatched' },
+  });
+  assert.equal(patched.status, 200);
+  const reread = await api('GET', `/api/orders/${state.gradedOrderId}`, { token: tokens.fpo });
+  assert.equal(reread.json.data.fpo_corridor, 'Nilgiris cluster → Thanjavur hub');
+});
+
+test('fpo: EV agent assignment requires a received corridor shipment', async () => {
+  const orderId = state.gradedOrderId;
+  const assign = (agent) =>
+    api('PATCH', `/api/orders/${orderId}/agent`, { token: tokens.fpo, body: { agent } });
+
+  // Batch is still in transit → the doorstep handover must wait.
+  const tooEarly = await assign('Kumar · EV-01');
+  assert.equal(tooEarly.status, 409, JSON.stringify(tooEarly.json));
+  assert.equal(tooEarly.json.error.code, 'BATCH_NOT_RECEIVED');
+
+  // Role + payload guards.
+  assert.equal(
+    (await api('PATCH', `/api/orders/${orderId}/agent`, { token: tokens.consumer, body: { agent: 'x' } })).status,
+    403,
+    'consumers cannot assign agents'
+  );
+  assert.equal((await api('PATCH', `/api/orders/${orderId}/agent`, { token: tokens.fpo, body: {} })).status, 400);
+
+  // Receive the shipment at the destination hub, then assign.
+  const received = await api('PATCH', `/api/fpo/batches/${state.corridorBatchId}`, {
+    token: tokens.fpo,
+    body: { transit_status: 'received' },
+  });
+  assert.equal(received.status, 200);
+
+  const assigned = await assign('Kumar · EV-01');
+  assert.equal(assigned.status, 200, JSON.stringify(assigned.json));
+  assert.equal(assigned.json.data.fpo_ev_agent, 'Kumar · EV-01');
+  assert.ok(assigned.json.data.fpo_ev_assigned_at, 'fpo_ev_assigned_at is stamped');
+  assert.equal(assigned.json.data.delivery_stage, 'outForDelivery', 'stage advanced in the same write');
+});
+
+test('fpo: an order with no corridor batch is dispatched directly', async () => {
+  const orderId = await orderAtCollectionPoint();
+  const graded = await api('PATCH', `/api/orders/${orderId}/grading`, {
+    token: tokens.fpo,
+    body: { fpo_grade: 'A', fpo_weigh_kg: 4 },
+  });
+  assert.equal(graded.status, 200, 'grading alone claims the order for the FPO');
+  assert.equal(graded.json.data.fpo_batch_id, null, 'no corridor shipment attached');
+
+  const assigned = await api('PATCH', `/api/orders/${orderId}/agent`, {
+    token: tokens.fpo,
+    body: { agent: 'Anitha · EV-02' },
+  });
+  assert.equal(assigned.status, 200, 'no receive step needed without a batch');
+  assert.equal(assigned.json.data.delivery_stage, 'outForDelivery');
+});
+
 test('unauthenticated write endpoints are rejected', async () => {
   assert.equal((await api('POST', '/api/produce', { body: { category: 'x', name: 'y', price: 1 } })).status, 401);
   assert.equal((await api('POST', '/api/orders', { body: { produce_id: 1, quantity: 1, address: 'x' } })).status, 401);

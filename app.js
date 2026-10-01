@@ -653,8 +653,15 @@ document.querySelectorAll('.auth-tab').forEach(tab=>{
   };
 });
 
-document.getElementById('loginForm').addEventListener('submit', e=>{
+// LOGIN — API FIRST, DEMO FALLBACK:
+//   1. loginViaApi() resolves the identifier to a phone and calls the backend
+//      (auto-registering seeded demo accounts the first time they are used),
+//   2. if the backend is unreachable the original localStorage-only demo login
+//      below still runs, so the offline experience is unchanged.
+document.getElementById('loginForm').addEventListener('submit', async e=>{
   e.preventDefault();
+  // Try the backend before the local demo accounts (returns true when handled).
+  if (await loginViaApi(document.getElementById('loginId').value.trim(), document.getElementById('loginPass').value)) return;
   const id = document.getElementById('loginId').value.trim();
   const pass = document.getElementById('loginPass').value;
   const users = store.users();
@@ -712,6 +719,9 @@ document.getElementById('signupForm').addEventListener('submit', e=>{
     : {type:"consumer",name,phone,password:pass,address:"",following:[]};
   store.saveUsers(users);
   if (selectedRole==='consumer') store.saveCart(uname, []);
+  // Also create the account on the backend (best effort). The local demo
+  // account already exists, so this can fail without breaking anything.
+  registerOnBackend({uname, name, phone, pass, role: selectedRole});
   toast("✅ Account created!");
   loginAs(uname);
 });
@@ -724,6 +734,8 @@ function loginAs(username){
 }
 
 function showLoginScreen(){
+  // Logging out also discards the backend JWT (see api.js).
+  if (typeof apiClearSession === 'function') apiClearSession();
   const loginRole = currentRole || selectedRole;
   currentUser = null; currentRole = null;
   localStorage.removeItem('ud_currentUser');
@@ -750,6 +762,8 @@ document.getElementById('brandLoginBtn').onclick = ()=>{
   showLoginScreen();
 };
 document.getElementById('userChip').onclick = ()=> goTo('profile');
+// Clicking the backend-status chip re-probes the API and resyncs (see api.js).
+document.getElementById('apiStatusChip').onclick = ()=> apiStatusChipClicked();
 
 document.getElementById('cartBtn').onclick = openCartDrawer;
 document.getElementById('closeCartBtn').onclick = closeCartDrawer;
@@ -842,6 +856,10 @@ function money(n){ return '₹' + Number(n).toLocaleString('en-IN'); }
 
 /* ---------- Boot / routing ---------- */
 function boot(){
+  // BACKEND STATUS: paint the connection chip immediately, then check the API
+  // in the background. The UI never waits on the network (see api.js).
+  if (typeof apiRenderStatus === 'function') apiRenderStatus();
+  if (typeof apiProbe === 'function') apiProbe();
   updateLocalizedBrand();
   closeCartDrawer();
   if (currentUser){
@@ -851,6 +869,10 @@ function boot(){
     document.getElementById('cartBtn').classList.toggle('hidden', currentRole!=='consumer');
     renderCartDrawer();
     document.getElementById('userChipName').textContent = getUser(currentUser).name;
+    // API-FIRST DATA: validate the saved JWT via /api/auth/me, then mirror
+    // backend produce/auctions/orders/batches into localStorage and re-render.
+    // Fire-and-forget, so a slow or missing backend never blocks the app.
+    if (typeof apiBoot === 'function') apiBoot();
     currentView = 'dashboard';
     renderNav();
     renderView('dashboard');
@@ -1045,7 +1067,9 @@ function distanceBetweenCitiesKm(fromCity,toCity){
 //   2. an 'ud-stage-changed' event fires, which an open tracking modal
 //      listens to (see openTrackingModal) so the consumer's timeline and
 //      Leaflet map refresh the moment an FPO/farmer acts.
-function setOrderStage(orderId, stage, extraFields){
+// `options.skipApiSync` is used by assignFpoEvAgent(), where the backend has a
+// dedicated atomic endpoint that records the agent AND the stage together.
+function setOrderStage(orderId, stage, extraFields, options){
   const orders = store.orders();
   const o = orders.find(x=>x.id===orderId);
   if (!o) return null;
@@ -1055,6 +1079,9 @@ function setOrderStage(orderId, stage, extraFields){
   if (extraFields) Object.assign(o, extraFields);
   store.saveOrders(orders);
   window.dispatchEvent(new CustomEvent('ud-stage-changed', {detail:{orderId, stage}}));
+  // MIRROR THE STAGE TO THE BACKEND (api.js). The helper collapses the
+  // front-end's extra 'atCustomerCity' step onto the backend's 'atFpo'.
+  if (!options || !options.skipApiSync) syncOrderStageToApi(o, stage);
   return o;
 }
 // Moves an order one step forward through DELIVERY_STAGES. Reaching
@@ -1443,6 +1470,7 @@ function updateOrderStatus(id,status){
   store.saveOrders(orders);
   // Let any open tracking modal re-read the order (status feeds its state too).
   window.dispatchEvent(new CustomEvent('ud-stage-changed', {detail:{orderId:id, stage:getOrderStage(o)}}));
+  syncOrderStatusToApi(o, status);
   toast(status==='completed' ? "✅ Order marked delivered" : "💸 Refund issued to consumer");
   renderView(currentView);
 }
@@ -1561,12 +1589,12 @@ function renderSellItem(root){
     const unit = document.getElementById('sUnit').value;
     const price = Number(document.getElementById('sPrice').value);
     if (!name || !qty || !price){ toast("⚠️ Fill in all fields."); return; }
-    const produce = store.produce();
-    produce.push({id:'p'+Date.now(), farmer:currentUser, name, category, qty, unit, price,
-      image:selectedProductImage, icon:iconFor(name,category), perish:guessPerishability(name,category), sold:false});
-    store.saveProduce(produce);
-    toast(`✅ ${name} listed on the marketplace`);
-    renderView('sell');
+    // API-FIRST LISTING (api.js): saves to the backend when the farmer is
+    // signed in against it, otherwise stores a local demo listing.
+    addProduceListing({name, category, qty, unit, price, image:selectedProductImage}).then(()=>{
+      toast(`✅ ${name} listed on the marketplace`);
+      renderView('sell');
+    });
   };
   const grid = document.getElementById('myProduce2');
   store.produce().filter(p=>p.farmer===currentUser).forEach(p=> grid.appendChild(produceCardEl(p,true)));
@@ -1605,12 +1633,11 @@ function renderFarmerBidding(root){
     const hrs = Number(document.getElementById('aDuration').value);
     const qty = Number(document.getElementById('aQty').value);
     if (!p || !base || !qty){ toast("⚠️ Fill all auction fields."); return; }
-    const auctions = store.auctions();
-    auctions.push({id:'a'+Date.now(), farmer:currentUser, item:p.name, image:p.image, icon:p.icon, baseRate:base,
-      unit:p.unit, qty, highestBid:base, highestBidder:null, endsAt:Date.now()+hrs*3600*1000, sold:false});
-    store.saveAuctions(auctions);
-    toast("🚀 Auction started!");
-    renderView('bidding');
+    // API-FIRST when the listing itself came from the backend (api.js).
+    startAuctionListing(p, base, qty, hrs).then(()=>{
+      toast("🚀 Auction started!");
+      renderView('bidding');
+    });
   };
   renderAuctionList(document.getElementById('auctionList'), auctions, false);
 }
@@ -1653,6 +1680,7 @@ function placeBid(auctionId, amountStr){
   a.highestBid = amount;
   a.highestBidder = getUser(currentUser).name;
   store.saveAuctions(auctions);
+  syncBidToApi(a, amount);
   toast("✅ Bid placed! You're the highest bidder.");
   renderView(currentView);
 }
@@ -2094,6 +2122,9 @@ function confirmFpoGrade(orderId){
   live.fpoGradedAt = new Date().toISOString();
   store.saveOrders(orders);
   notifyOrderConsumer(live, `${live.item} (${weighKg} kg) graded ${live.fpoGrade} at the farm gate.`);
+  // TIER-1 SERVER WRITE: persist the AGMARK grade + digital weighment, and
+  // this is also the call that CLAIMS the lot for this FPO on the backend.
+  syncFpoGradeToApi(live, live.fpoGrade, weighKg);
   toast(`✅ ${live.item} graded ${live.fpoGrade} · ${weighKg} kg → batching queue`);
   renderView(currentView);
 }
@@ -2123,6 +2154,9 @@ function createFpoBatch(){
     if (o){ o.fpoBatchId = batchId; o.fpoCorridor = corridor; o.fpoVehicle = vehicleKey; }
   });
   store.saveOrders(orders);
+  // Register the shipment on the backend so it can own these orders and later
+  // advance their delivery stages (api.js syncs when the FPO is signed in).
+  syncNewBatchToBackend(batches[batches.length-1], selected);
   toast(`🚛 Batch assembled · ${weightKg} kg on the ${corridor} corridor`);
   renderView(currentView);
 }
@@ -2142,6 +2176,7 @@ function dispatchFpoBatch(batchId){
     const o = setOrderStage(orderId, 'atFpo', {fpoDispatchedAt: batch.dispatchedAt});
     if (o) notifyOrderConsumer(o, `Shipped on the ${batch.corridor} corridor → ${batch.destinationHub}. Pick a delivery slot in tracking.`);
   });
+  syncBatchStatusToApi(batch, 'dispatched');
   toast(`🚚 Batch dispatched → ${batch.destinationHub}`);
   renderView(currentView);
 }
@@ -2155,6 +2190,7 @@ function receiveFpoBatch(batchId){
   // de-batched at the destination hub
   batch.receivedAt = new Date().toISOString();
   store.saveFpoBatches(batches);
+  syncBatchStatusToApi(batch, 'received');
   toast(`📥 ${batch.corridor} shipment received & de-batched at ${batch.destinationHub}`);
   renderView(currentView);
 }
@@ -2176,7 +2212,10 @@ function assignFpoEvAgent(orderId){
   live.fpoEvAgent = agent;
   live.fpoEvAssignedAt = new Date().toISOString();
   store.saveOrders(orders);
-  setOrderStage(orderId, 'outForDelivery');
+  // TIER-3 SERVER WRITE: the backend records the agent and advances the stage
+  // in ONE atomic statement, so the generic stage sync is skipped here.
+  setOrderStage(orderId, 'outForDelivery', null, {skipApiSync:true});
+  syncEvAgentToApi(live, agent);
   // global stage write + live event
   notifyOrderConsumer(live, `${agent} picked up your order — out for delivery.`);
   toast(`🛵 ${agent} assigned → out for delivery`);
@@ -2557,7 +2596,10 @@ function renderConsumerDashboard(root){
 
 function addToCart(p, qty){
   const cart = store.cart(currentUser);
-  const existing = cart.find(c=>c.name===p.name && c.farmer===p.farmer);
+  // Match the exact listing first (so a backend listing and a local demo
+  // listing with the same name never merge into one cart line).
+  const existing = cart.find(c=> c.productId && c.productId===p.id)
+                || cart.find(c=> c.name===p.name && c.farmer===p.farmer);
   if (existing){
     existing.qty += qty;
     existing.productId ||= p.id;
@@ -2999,9 +3041,19 @@ function completeCheckout(){
   playCheckoutChime();
   const orders = store.orders();
   const u = getUser(currentUser);
+  // Cart lines whose listing exists on the backend are created as REAL orders
+  // there (the API decrements stock atomically). Demo-only lines keep using the
+  // local path below, so nothing about the offline demo changes.
+  const apiLines = [];
   cart.forEach(c=>{
     const produce = store.produce();
-    const product = produce.find(item=>(c.productId && item.id===c.productId) || (item.farmer===c.farmer && item.name===c.name));
+    // Prefer an EXACT listing match (the cart stores productId) and only fall
+    // back to farmer + name. Backend and local demo data can both hold a
+    // listing with the same farmer and produce name, and a single combined
+    // find() would return whichever came first in the array.
+    const product = produce.find(item=> c.productId && item.id===c.productId)
+                 || produce.find(item=> item.farmer===c.farmer && item.name===c.name);
+    if (API_ENABLED && apiToken && product && product.apiId){ apiLines.push({line:c, product}); return; }
     orders.push({id:'o'+Date.now()+Math.random().toString(36).slice(2,5), farmer:c.farmer, consumer:u.name,
       productId:c.productId || product?.id, item:c.name, qty:c.qty, unit:c.unit, price:c.price*c.qty, city:u.city.trim(), address:u.address.trim(),
       status:'pending', date:new Date().toISOString().slice(0,10),
@@ -3013,6 +3065,9 @@ function completeCheckout(){
   store.saveOrders(orders);
   store.saveCart(currentUser, []);
   renderCartDrawer();
+  // Push the API-backed lines to the backend (`orders` above already holds the
+  // local-only ones). Runs after the UI has moved on, then resyncs quietly.
+  if (apiLines.length) createBackendOrders(apiLines, u);
   toast("✅ Order placed! Track it on your dashboard.");
   goTo('dashboard');
   return true;

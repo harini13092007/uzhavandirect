@@ -57,6 +57,20 @@ CREATE TABLE IF NOT EXISTS auctions (
 CREATE INDEX IF NOT EXISTS idx_auctions_farmer ON auctions (farmer_id);
 CREATE INDEX IF NOT EXISTS idx_auctions_ends_at ON auctions (ends_at);
 
+-- fpo_batches is declared BEFORE orders because orders.fpo_batch_id references it.
+CREATE TABLE IF NOT EXISTS fpo_batches (
+  id                     SERIAL PRIMARY KEY,
+  fpo_id                 INTEGER     NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  source_cluster         TEXT        NOT NULL,
+  destination_hub        TEXT        NOT NULL,
+  consolidated_weight_kg NUMERIC     NOT NULL DEFAULT 0 CHECK (consolidated_weight_kg >= 0),
+  vehicle_type           TEXT,
+  transit_status         TEXT        NOT NULL DEFAULT 'loading',
+  orders_list            JSONB       NOT NULL DEFAULT '[]',
+  created_at             TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_fpo_batches_fpo ON fpo_batches (fpo_id);
+
 CREATE TABLE IF NOT EXISTS orders (
   id              SERIAL PRIMARY KEY,
   consumer_id     INTEGER     NOT NULL REFERENCES users (id) ON DELETE CASCADE,
@@ -73,22 +87,44 @@ CREATE TABLE IF NOT EXISTS orders (
                     ('placed', 'confirmed', 'packed', 'atFarmerCity', 'atFpo', 'outForDelivery', 'delivered')),
   address         TEXT,
   delivery_timing TEXT,
+  -- ---------------------------------------------------------------------
+  -- FPO lifecycle columns: the three tier steps recorded per order.
+  --   Tier-1  first-mile collection  → fpo_grade / fpo_weigh_kg / fpo_graded_at
+  --   Tier-2  corridor batching      → fpo_batch_id / fpo_corridor / fpo_vehicle
+  --   Tier-3  destination hub        → fpo_ev_agent / fpo_ev_assigned_at
+  -- ---------------------------------------------------------------------
+  -- NOTE: the checks are written NULL-safely (`IS NULL OR …`). Standard SQL
+  -- passes a CHECK when it evaluates to NULL, but some engines (and pg-mem in
+  -- the test suite) do not — being explicit keeps a plain INSERT, which leaves
+  -- these columns empty, valid everywhere.
+  fpo_grade          TEXT    CHECK (fpo_grade IS NULL OR fpo_grade IN ('A', 'B', 'C')),
+  fpo_weigh_kg       NUMERIC CHECK (fpo_weigh_kg IS NULL OR fpo_weigh_kg >= 0),
+  fpo_graded_at      TIMESTAMPTZ,
+  fpo_batch_id       INTEGER REFERENCES fpo_batches (id) ON DELETE SET NULL,
+  fpo_corridor       TEXT,
+  fpo_vehicle        TEXT,
+  fpo_ev_agent       TEXT,
+  fpo_ev_assigned_at TIMESTAMPTZ,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_orders_consumer ON orders (consumer_id);
 CREATE INDEX IF NOT EXISTS idx_orders_farmer ON orders (farmer_id);
 CREATE INDEX IF NOT EXISTS idx_orders_fpo ON orders (fpo_id);
+CREATE INDEX IF NOT EXISTS idx_orders_fpo_batch ON orders (fpo_batch_id);
 
-CREATE TABLE IF NOT EXISTS fpo_batches (
-  id                     SERIAL PRIMARY KEY,
-  fpo_id                 INTEGER     NOT NULL REFERENCES users (id) ON DELETE CASCADE,
-  source_cluster         TEXT        NOT NULL,
-  destination_hub        TEXT        NOT NULL,
-  consolidated_weight_kg NUMERIC     NOT NULL DEFAULT 0 CHECK (consolidated_weight_kg >= 0),
-  vehicle_type           TEXT,
-  transit_status         TEXT        NOT NULL DEFAULT 'loading',
-  orders_list            JSONB       NOT NULL DEFAULT '[]',
-  created_at             TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-CREATE INDEX IF NOT EXISTS idx_fpo_batches_fpo ON fpo_batches (fpo_id);
+-- ---------------------------------------------------------------------------
+-- MIGRATION: FPO tier columns for databases created before they existed.
+-- `CREATE TABLE IF NOT EXISTS` above cannot add columns to an existing table,
+-- so these idempotent ALTERs upgrade an older orders table in place. On a
+-- fresh database every statement is a no-op (the columns already exist).
+-- ---------------------------------------------------------------------------
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS fpo_grade          TEXT    CHECK (fpo_grade IS NULL OR fpo_grade IN ('A', 'B', 'C'));
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS fpo_weigh_kg       NUMERIC CHECK (fpo_weigh_kg IS NULL OR fpo_weigh_kg >= 0);
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS fpo_graded_at      TIMESTAMPTZ;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS fpo_batch_id       INTEGER REFERENCES fpo_batches (id) ON DELETE SET NULL;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS fpo_corridor       TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS fpo_vehicle        TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS fpo_ev_agent       TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS fpo_ev_assigned_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS idx_orders_fpo_batch ON orders (fpo_batch_id);

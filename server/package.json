@@ -8,7 +8,9 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "migrate": "node src/migrate.js",
-    "test": "node --test"
+    "dev:memory": "node dev-memory.js",
+    "test": "node --test",
+    "smoke": "node scripts/smoke-live.js"
   },
   "engines": {
     "node": ">=18"

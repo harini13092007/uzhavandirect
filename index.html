@@ -136,6 +136,9 @@
         </div>
 
         <button id="settingsShortcutBtn" class="theme-settings-btn" type="button" title="Settings" aria-label="Open profile settings"><span class="settings-gear" aria-hidden="true">⚙</span></button>
+        <!-- BACKEND STATUS: green when the Express API is reachable, grey
+             (offline demo mode) otherwise. Clicking re-probes and resyncs. -->
+        <button id="apiStatusChip" class="api-status-chip" type="button" title="Backend connection">⚪ Demo</button>
         <button class="user-chip" id="userChip" type="button" aria-label="Open profile and settings">👤 <span id="userChipName">User</span></button>
       </div>
     </header>
@@ -177,6 +180,9 @@
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- BACKEND API LAYER: fetch wrapper + JWT handling + stage mapping.
+     Loaded before app.js so app.js can use api.* (see api.js for details). -->
+<script src="api.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

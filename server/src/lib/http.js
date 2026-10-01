@@ -41,6 +41,8 @@ function notFound(message = 'Endpoint not found') {
 
 const ROLES = ['farmer', 'consumer', 'fpo'];
 const STATUSES = ['pending', 'completed', 'refunded'];
+/** AGMARK quality grades used by the FPO Tier-1 grading step. */
+const AGMARK_GRADES = ['A', 'B', 'C'];
 const DELIVERY_STAGES = [
   'placed',
   'confirmed',
@@ -150,5 +152,6 @@ module.exports = {
   errorHandler,
   ROLES,
   STATUSES,
+  AGMARK_GRADES,
   DELIVERY_STAGES,
 };

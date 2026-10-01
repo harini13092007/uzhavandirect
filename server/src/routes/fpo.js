@@ -1,8 +1,15 @@
 /**
  * /api/fpo — batch / shipment management for FPO logistics partners.
+ *   GET   /api/fpo/inbound          Tier-1 work queue: lots awaiting grading
  *   GET   /api/fpo/batches          list this FPO's batches
+ *   GET   /api/fpo/batches/:id      one batch
  *   POST  /api/fpo/batches          create; attaching orders assigns them to this FPO
  *   PATCH /api/fpo/batches/:id      update status / details / attached orders
+ *
+ * Attaching an order also stamps its Tier-2 columns (fpo_batch_id, fpo_corridor,
+ * fpo_vehicle) so the shipment an order travelled on is queryable on the order
+ * itself — that is what lets PATCH /api/orders/:id/agent enforce
+ * "receive the corridor shipment first".
  */
 const express = require('express');
 const { query, withTransaction } = require('../db');
@@ -46,18 +53,36 @@ async function assertAttachable(fpoId, orderIds) {
   }
 }
 
+/** "Nilgiris cluster → Thanjavur hub" — the corridor label stored on orders. */
+function corridorLabel(batch) {
+  return `${batch.source_cluster} → ${batch.destination_hub}`;
+}
+
 /**
- * Attach orders to an FPO. Each order must be unassigned or already ours.
+ * Attach orders to an FPO and stamp their Tier-2 corridor columns.
+ * Each order must be unassigned or already ours.
  * Returns the ids that could not be attached.
+ *
+ * COALESCE keeps an existing value when the batch does not carry one, so
+ * patching a batch's status never wipes the corridor it was created with.
  */
-async function attachOrders(client, fpoId, orderIds) {
+async function attachOrders(client, fpoId, orderIds, batch) {
   const rejected = [];
+  const batchId = batch && batch.id !== undefined ? batch.id : null;
+  const corridor = batch ? corridorLabel(batch) : null;
+  const vehicle = batch ? batch.vehicle_type || null : null;
+
   for (const rawId of orderIds) {
     const orderId = asId(rawId, 'orders_list entry');
     const result = await client.query(
-      `UPDATE orders SET fpo_id = $1, updated_at = now()
-       WHERE id = $2 AND (fpo_id IS NULL OR fpo_id = $1)`,
-      [fpoId, orderId]
+      `UPDATE orders
+          SET fpo_id       = $1,
+              fpo_batch_id = COALESCE($2, fpo_batch_id),
+              fpo_corridor = COALESCE($3, fpo_corridor),
+              fpo_vehicle  = COALESCE($4, fpo_vehicle),
+              updated_at   = now()
+        WHERE id = $5 AND (fpo_id IS NULL OR fpo_id = $1)`,
+      [fpoId, batchId, corridor, vehicle, orderId]
     );
     if (result.rowCount === 0) rejected.push(orderId);
   }
@@ -71,6 +96,45 @@ async function loadBatch(id, fpoId) {
   }
   return rows[0];
 }
+
+/* ----------------------------- Tier-1 inbound ----------------------------- */
+
+/**
+ * GET /api/fpo/inbound
+ *
+ * The Tier-1 work queue: lots that have reached the farm-gate collection
+ * point, have not been graded yet, and are either unclaimed or already ours.
+ * This is the server-side equivalent of the front-end's fpoAwaitingGrade().
+ *
+ * A lot already claimed by a DIFFERENT FPO is excluded — it is not our work.
+ *
+ * ?include_graded=true also returns our own already-graded lots (the Tier-1
+ * "graded & queued" table).
+ */
+router.get(
+  '/inbound',
+  asyncHandler(async (req, res) => {
+    const includeGraded = req.query.include_graded === 'true';
+    const { rows } = await query(
+      `SELECT o.*,
+              c.name AS consumer_name,
+              f.name AS farmer_name,
+              f.village AS farmer_village,
+              p.name AS produce_name,
+              p.image_url
+         FROM orders o
+         JOIN users   c ON c.id = o.consumer_id
+         JOIN users   f ON f.id = o.farmer_id
+         JOIN produce p ON p.id = o.produce_id
+        WHERE o.delivery_stage = 'atFarmerCity'
+          AND (o.fpo_id IS NULL OR o.fpo_id = $1)
+          AND ($2::boolean OR o.fpo_grade IS NULL)
+        ORDER BY o.id DESC`,
+      [req.user.id, includeGraded]
+    );
+    return ok(res, rows);
+  })
+);
 
 /* --------------------------------- list ---------------------------------- */
 
@@ -127,7 +191,7 @@ router.post(
           JSON.stringify(orderIds.map(Number)),
         ]
       );
-      await attachOrders(client, req.user.id, orderIds);
+      await attachOrders(client, req.user.id, orderIds, rows[0]);
       return rows[0];
     });
 
@@ -185,7 +249,7 @@ router.patch(
         params
       );
       if (b.orders_list !== undefined) {
-        await attachOrders(client, req.user.id, b.orders_list);
+        await attachOrders(client, req.user.id, b.orders_list, rows[0]);
       }
       return rows[0];
     });

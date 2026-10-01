@@ -23,6 +23,7 @@ const {
   asNumber,
   asId,
   STATUSES,
+  AGMARK_GRADES,
   DELIVERY_STAGES,
 } = require('../lib/http');
 
@@ -226,6 +227,136 @@ router.patch(
       [stage, id]
     );
     return ok(res, rows[0], `Delivery stage → ${stage}`);
+  })
+);
+
+/* ------------------------------ FPO Tier-1 ------------------------------- */
+
+/**
+ * PATCH /api/orders/:id/grading      (fpo only)
+ * Body: { fpo_grade: 'A'|'B'|'C', fpo_weigh_kg: number }
+ *
+ * Records the digital weighment + AGMARK grade taken at the village farm-gate
+ * collection point, and CLAIMS the lot for this FPO (sets orders.fpo_id).
+ * Grading is what puts a lot into the Tier-2 batching queue.
+ *
+ * Guards:
+ *   • a lot already claimed by a different FPO is refused (403);
+ *   • the lot must have reached the aggregation point first (409).
+ * Re-grading a lot we already own is allowed (correcting a typo).
+ */
+router.patch(
+  '/:id/grading',
+  authenticate,
+  requireRole('fpo'),
+  asyncHandler(async (req, res) => {
+    const id = asId(req.params.id, 'id');
+    const order = await loadOrder(id);
+
+    // NOTE: no assertParticipant() here — an unclaimed lot (fpo_id IS NULL) is
+    // deliberately visible to every FPO so it can be picked up and graded.
+    if (order.fpo_id !== null && order.fpo_id !== req.user.id) {
+      throw new HttpError(403, 'FORBIDDEN', 'This lot has already been claimed by another FPO');
+    }
+
+    const b = req.body || {};
+    requireFields(b, ['fpo_grade', 'fpo_weigh_kg']);
+    const grade = oneOf(String(b.fpo_grade).trim().toUpperCase(), AGMARK_GRADES, 'fpo_grade');
+    const weighKg = asNumber(b.fpo_weigh_kg, 'fpo_weigh_kg', { min: 0.01 });
+
+    const currentIndex = DELIVERY_STAGES.indexOf(order.delivery_stage);
+    if (currentIndex < DELIVERY_STAGES.indexOf('atFarmerCity')) {
+      throw new HttpError(
+        409,
+        'STAGE_NOT_ALLOWED',
+        'Lot has not reached the collection point yet',
+        { current: order.delivery_stage, required: 'atFarmerCity' }
+      );
+    }
+
+    const { rows } = await query(
+      `UPDATE orders
+          SET fpo_id         = $1,
+              fpo_grade      = $2,
+              fpo_weigh_kg   = $3,
+              fpo_graded_at  = now(),
+              updated_at     = now()
+        WHERE id = $4
+        RETURNING *`,
+      [req.user.id, grade, weighKg, id]
+    );
+    return ok(res, rows[0], `Graded ${grade} · ${weighKg} kg`);
+  })
+);
+
+/* ------------------------------ FPO Tier-3 ------------------------------- */
+
+/**
+ * PATCH /api/orders/:id/agent        (fpo only)
+ * Body: { agent: 'Kumar · EV-01' }
+ *
+ * Tier-3 last mile: hands the parcel to an EV doorstep agent AND advances the
+ * order to 'outForDelivery' in the SAME statement, so the assignment and the
+ * consumer's tracking stage can never contradict each other.
+ *
+ * Guards:
+ *   • the order must already belong to this FPO (404 otherwise);
+ *   • if the order travelled on a corridor batch, that batch must have been
+ *     received (de-batched) at the destination hub first (409);
+ *   • an order that is already delivered cannot be pushed back (409).
+ */
+router.patch(
+  '/:id/agent',
+  authenticate,
+  requireRole('fpo'),
+  asyncHandler(async (req, res) => {
+    const id = asId(req.params.id, 'id');
+    const order = await loadOrder(id);
+    assertParticipant(order, req.user);
+
+    const b = req.body || {};
+    requireFields(b, ['agent']);
+    const agent = String(b.agent).trim();
+    if (agent.length < 2 || agent.length > 80) {
+      throw new HttpError(400, 'VALIDATION_ERROR', 'agent must be 2–80 characters', {
+        received: b.agent,
+      });
+    }
+
+    if (order.fpo_batch_id !== null && order.fpo_batch_id !== undefined) {
+      const { rows: batches } = await query(
+        'SELECT transit_status FROM fpo_batches WHERE id = $1',
+        [order.fpo_batch_id]
+      );
+      const transitStatus = batches.length ? batches[0].transit_status : null;
+      if (transitStatus !== 'received') {
+        throw new HttpError(
+          409,
+          'BATCH_NOT_RECEIVED',
+          'Receive the corridor shipment before assigning a doorstep agent',
+          { transit_status: transitStatus }
+        );
+      }
+    }
+
+    const currentIndex = DELIVERY_STAGES.indexOf(order.delivery_stage);
+    if (currentIndex > DELIVERY_STAGES.indexOf('outForDelivery')) {
+      throw new HttpError(409, 'STAGE_REGRESSION', 'Order has already been delivered', {
+        current: order.delivery_stage,
+      });
+    }
+
+    const { rows } = await query(
+      `UPDATE orders
+          SET fpo_ev_agent       = $1,
+              fpo_ev_assigned_at = now(),
+              delivery_stage     = 'outForDelivery',
+              updated_at         = now()
+        WHERE id = $2
+        RETURNING *`,
+      [agent, id]
+    );
+    return ok(res, rows[0], `${agent} assigned — out for delivery`);
   })
 );
 
