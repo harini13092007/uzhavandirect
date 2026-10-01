@@ -36,6 +36,19 @@
 | 7 | `server/package.json` | modified | +2 | `dev:memory` and `smoke` scripts |
 | 8 | `.preview-server.js` / `.preview-server.log` | deleted | — | Leftover temp files from the previous session (uncommitted deletion) |
 
+Added by the **FPO tier persistence** step (§12):
+
+| # | File | Status | What changed |
+|---|---|---|---|
+| 9 | `server/src/schema.sql` | modified | `fpo_batches` moved above `orders`; 8 FPO lifecycle columns; idempotent `ALTER TABLE` migration block |
+| 10 | `server/src/lib/http.js` | modified | New `AGMARK_GRADES` constant, exported |
+| 11 | `server/src/routes/orders.js` | modified | New `PATCH /:id/grading` and `PATCH /:id/agent` endpoints |
+| 12 | `server/src/routes/fpo.js` | modified | New `GET /inbound`; batch attach stamps corridor columns on orders |
+| 13 | `server/test/api.test.js` | modified | +5 tests (25 → 30) |
+| 14 | `server/scripts/smoke-live.js` | modified | +6 checks (28 → 34) |
+| 15 | `api.js` | modified | 3 facade methods, 2 sync helpers, API-aware merge, new field mapping |
+| 16 | `app.js` | modified | Tier-1/Tier-3 sync calls, `skipApiSync` option, exact-match cart/product lookup fix |
+
 > No backend route, schema, middleware or existing test file was modified.
 
 ---

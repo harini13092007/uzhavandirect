@@ -114,6 +114,30 @@ CREATE INDEX IF NOT EXISTS idx_orders_fpo ON orders (fpo_id);
 CREATE INDEX IF NOT EXISTS idx_orders_fpo_batch ON orders (fpo_batch_id);
 
 -- ---------------------------------------------------------------------------
+-- In-app notifications (bell in the topbar). Deliberately minimal: no push,
+-- email or SMS — these rows only feed the existing dropdown.
+--   user_id   recipient (the farmer, consumer or FPO who sees the badge)
+--   type      grouping shown in the dropdown: order | grade | fpo | system
+--   order_id  set when the alert is about one specific order
+--   batch_id  set when the alert is about one corridor shipment
+-- order_id/batch_id are ON DELETE SET NULL so deleting an order never
+-- destroys the alert history it produced.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS notifications (
+  id         SERIAL PRIMARY KEY,
+  user_id    INTEGER     NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  type       TEXT        NOT NULL DEFAULT 'info'
+             CHECK (type IN ('order', 'grade', 'fpo', 'system')),
+  message    TEXT        NOT NULL,
+  order_id   INTEGER     REFERENCES orders (id) ON DELETE SET NULL,
+  batch_id   INTEGER     REFERENCES fpo_batches (id) ON DELETE SET NULL,
+  is_read    BOOLEAN     NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications (user_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_unread ON notifications (user_id, is_read);
+
+-- ---------------------------------------------------------------------------
 -- MIGRATION: FPO tier columns for databases created before they existed.
 -- `CREATE TABLE IF NOT EXISTS` above cannot add columns to an existing table,
 -- so these idempotent ALTERs upgrade an older orders table in place. On a
@@ -128,3 +152,18 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS fpo_vehicle        TEXT;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS fpo_ev_agent       TEXT;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS fpo_ev_assigned_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS idx_orders_fpo_batch ON orders (fpo_batch_id);
+
+-- MIGRATION: notifications did not exist before this step either.
+CREATE TABLE IF NOT EXISTS notifications (
+  id         SERIAL PRIMARY KEY,
+  user_id    INTEGER     NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  type       TEXT        NOT NULL DEFAULT 'info'
+             CHECK (type IN ('order', 'grade', 'fpo', 'system')),
+  message    TEXT        NOT NULL,
+  order_id   INTEGER     REFERENCES orders (id) ON DELETE SET NULL,
+  batch_id   INTEGER     REFERENCES fpo_batches (id) ON DELETE SET NULL,
+  is_read    BOOLEAN     NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications (user_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_unread ON notifications (user_id, is_read);
