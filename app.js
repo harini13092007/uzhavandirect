@@ -12,7 +12,7 @@
    =============================== */
 const I18N = {
     en:{dashboard:"Dashboard",sellItem:"Sell Produce",bidding:"Auctions",demand:"Market Demand",
-      aiChat:"Farm Advisor",settings:"Settings",itemsOrdered:"Purchased Items",cart:"Basket",
+      aiChat:"Uzhavan AI",settings:"Settings",itemsOrdered:"Purchased Items",cart:"Basket",
       history:"Purchase History",farmerProfile:"Farmer Details",following:"Farmers You Follow",moneyDetails:"Money Details",
       nearby:"Nearby Produce",search:"Search Produce",logout:"Log out",ordersPending:"Pending Sales",
       ordersCompleted:"Completed Sales",moneyReceived:"Total Income",moneySpent:"Total Spent",
@@ -23,7 +23,7 @@ const I18N = {
       chooseTheme:"Choose a color theme",themeHarvest:"Harvest",themeEmerald:"Emerald",themeTeal:"Teal",
       fpoTier1:"First-Mile Aggregation",fpoTier2:"Corridor Batching",fpoTier3:"Hub Dispatch",fpoPortal:"FPO Portal"},
     ta:{dashboard:"முகப்புப் பலகை",sellItem:"விளைபொருள் விற்பனை",bidding:"ஏலம்",demand:"சந்தைத் தேவை",
-      aiChat:"AI விவசாய ஆலோசகர்",settings:"விருப்பங்கள்",itemsOrdered:"வாங்கிய பொருட்கள்",cart:"கூடை",
+      aiChat:"Uzhavan AI",settings:"விருப்பங்கள்",itemsOrdered:"வாங்கிய பொருட்கள்",cart:"கூடை",
       history:"வாங்கிய பொருட்களின் வரலாறு",farmerProfile:"விவசாயி விவரம்",following:"நீங்கள் பின்தொடரும் விவசாயிகள்",moneyDetails:"வரவு செலவு விவரங்கள்",
       nearby:"அருகிலுள்ள விளைபொருட்கள்",search:"விளைபொருள் தேடல்",logout:"வெளியேறு",ordersPending:"நிறைவேற்ற வேண்டிய விற்பனைகள்",
       ordersCompleted:"நிறைவேற்றிய விற்பனைகள்",moneyReceived:"மொத்த வரவு",moneySpent:"மொத்த செலவு",
@@ -34,7 +34,7 @@ const I18N = {
       chooseTheme:"வண்ணத் தோற்றத்தைத் தேர்ந்தெடுக்கவும்",themeHarvest:"அறுவடை",themeEmerald:"மரகதம்",themeTeal:"டீல்",
       fpoTier1:"முதல் மைல் ஒருங்கிணைப்பு",fpoTier2:"வழித்தட ஒருங்கிணைப்பு",fpoTier3:"விநியோக மைய அனுப்புதல்",fpoPortal:"FPO இணையம்"},
     hi:{dashboard:"मुख्य पटल",sellItem:"उपज बेचें",bidding:"नीलामी",demand:"बाज़ार की मांग",
-      aiChat:"खेती सलाहकार",settings:"प्राथमिकताएँ",itemsOrdered:"खरीदे गए सामान",cart:"टोकरी",
+      aiChat:"Uzhavan AI",settings:"प्राथमिकताएँ",itemsOrdered:"खरीदे गए सामान",cart:"टोकरी",
       history:"खरीद का इतिहास",farmerProfile:"किसान परिचय",following:"आप जिन किसानों से जुड़े हैं",moneyDetails:"आय-व्यय विवरण",
       nearby:"आस-पास की उपज",search:"उपज खोजें",logout:"बाहर जाएँ",ordersPending:"बाकी बिक्री",
       ordersCompleted:"पूरी हुई बिक्री",moneyReceived:"कुल आमदनी",moneySpent:"कुल खर्च",
